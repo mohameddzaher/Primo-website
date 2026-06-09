@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:transvelo.github.io)",
+      "Read(//Users/mohamedzaher/Desktop/primo-website/**)",
+      "Bash(ipconfig getifaddr en0)",
+      "Read(//tmp/**)",
+      "Bash(find /Users/mohamedzaher/Desktop/primo-website/apps/web/src -type f \\\\\\(-name *axios* -o -name *api* \\\\\\))",
+      "Bash(ipconfig getifaddr:*)",
+      "Bash(npm run:*)",
+      "WebSearch",
+      "WebFetch(domain:api.unsplash.com)",
+      "WebFetch(domain:www.pexels.com)",
+      "WebFetch(domain:logo.clearbit.com)",
+      "WebFetch(domain:upload.wikimedia.org)",
+      "WebFetch(domain:img.logo.dev)",
+      "WebFetch(domain:pngimg.com)",
+      "WebFetch(domain:cdn.worldvectorlogo.com)",
+      "WebFetch(domain:source.unsplash.com)",
+      "Read(//private/tmp/**)"
+    ]
+  }
+}
