@@ -342,14 +342,23 @@ router.post(
 
     const cart = await getOrCreateCart(req, res);
 
-    // Validate all products and build new items array
+    // Validate all products and build new items array. Batch-fetch every product
+    // in ONE query (avoids an N+1 lookup per cart line under load).
     const validItems: { productId: mongoose.Types.ObjectId; quantity: number; addedAt: Date }[] = [];
+
+    const requestedIds = syncItems
+      .filter((it: any) => it.productId && mongoose.Types.ObjectId.isValid(it.productId))
+      .map((it: any) => it.productId);
+    const products = await Product.find({ _id: { $in: requestedIds }, isActive: true })
+      .select('_id stockQuantity')
+      .lean();
+    const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
 
     for (const item of syncItems) {
       if (!item.productId || !mongoose.Types.ObjectId.isValid(item.productId)) continue;
       const qty = Math.max(1, Math.floor(item.quantity || 1));
 
-      const product = await Product.findOne({ _id: item.productId, isActive: true });
+      const product = productMap.get(item.productId.toString());
       if (!product) continue;
 
       const clampedQty = Math.min(qty, product.stockQuantity);

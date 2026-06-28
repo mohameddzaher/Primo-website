@@ -16,6 +16,26 @@ import { notifyAdminsNewReview } from '../services/notification.service';
 
 const router = Router();
 
+// Recompute a product's averageRating + reviewCount from its approved reviews
+// using a DB-side aggregation. This avoids loading every review into memory
+// (unbounded on popular products) and is consistent when many reviews land at
+// once. Call after any create/update/delete/moderate that changes approval.
+async function syncProductRating(productId: any): Promise<void> {
+  const [stats] = await Review.aggregate([
+    {
+      $match: {
+        productId: new mongoose.Types.ObjectId(productId.toString()),
+        status: 'approved',
+      },
+    },
+    { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } },
+  ]);
+  await Product.findByIdAndUpdate(productId, {
+    averageRating: stats ? Math.round(stats.avg * 10) / 10 : 0,
+    reviewCount: stats ? stats.count : 0,
+  });
+}
+
 // Get reviews for a product (public)
 router.get(
   '/product/:productId',
@@ -201,18 +221,7 @@ router.post(
     });
 
     // Update product rating and review count immediately
-    const approvedReviews = await Review.find({
-      productId,
-      status: 'approved',
-    });
-
-    const totalRating = approvedReviews.reduce((sum, r) => sum + r.rating, 0);
-    const averageRating = approvedReviews.length > 0 ? totalRating / approvedReviews.length : 0;
-
-    await Product.findByIdAndUpdate(productId, {
-      averageRating: Math.round(averageRating * 10) / 10,
-      reviewCount: approvedReviews.length,
-    });
+    await syncProductRating(productId);
 
     // Notify admins (they can still delete inappropriate reviews)
     notifyAdminsNewReview(product.title, rating, req.user!.fullName).catch(console.error);
@@ -253,17 +262,7 @@ router.patch(
     await review.save();
 
     // Update product rating
-    const approvedReviews = await Review.find({
-      productId: review.productId,
-      status: 'approved',
-    });
-
-    const totalRating = approvedReviews.reduce((sum, r) => sum + r.rating, 0);
-    const averageRating = approvedReviews.length > 0 ? totalRating / approvedReviews.length : 0;
-
-    await Product.findByIdAndUpdate(review.productId, {
-      averageRating: Math.round(averageRating * 10) / 10,
-    });
+    await syncProductRating(review.productId);
 
     res.json({
       success: true,
@@ -297,18 +296,7 @@ router.delete(
     await review.deleteOne();
 
     // Update product rating
-    const approvedReviews = await Review.find({
-      productId: review.productId,
-      status: 'approved',
-    });
-
-    const totalRating = approvedReviews.reduce((sum, r) => sum + r.rating, 0);
-    const averageRating = approvedReviews.length > 0 ? totalRating / approvedReviews.length : 0;
-
-    await Product.findByIdAndUpdate(review.productId, {
-      averageRating: Math.round(averageRating * 10) / 10,
-      reviewCount: approvedReviews.length,
-    });
+    await syncProductRating(review.productId);
 
     res.json({
       success: true,
@@ -428,18 +416,7 @@ router.patch(
 
     // Update product rating if status changed
     if (wasApproved !== isNowApproved) {
-      const approvedReviews = await Review.find({
-        productId: review.productId,
-        status: 'approved',
-      });
-
-      const totalRating = approvedReviews.reduce((sum, r) => sum + r.rating, 0);
-      const averageRating = approvedReviews.length > 0 ? totalRating / approvedReviews.length : 0;
-
-      await Product.findByIdAndUpdate(review.productId, {
-        averageRating: Math.round(averageRating * 10) / 10,
-        reviewCount: approvedReviews.length,
-      });
+      await syncProductRating(review.productId);
     }
 
     res.json({
@@ -482,18 +459,7 @@ router.delete(
     });
 
     // Update product rating
-    const approvedReviews = await Review.find({
-      productId: review.productId,
-      status: 'approved',
-    });
-
-    const totalRating = approvedReviews.reduce((sum, r) => sum + r.rating, 0);
-    const averageRating = approvedReviews.length > 0 ? totalRating / approvedReviews.length : 0;
-
-    await Product.findByIdAndUpdate(review.productId, {
-      averageRating: Math.round(averageRating * 10) / 10,
-      reviewCount: approvedReviews.length,
-    });
+    await syncProductRating(review.productId);
 
     res.json({
       success: true,

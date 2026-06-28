@@ -304,7 +304,7 @@ userSchema.methods.comparePassword = async function (
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ createdAt: -1 });
-userSchema.index({ referralCode: 1 });
+// referralCode already indexed via `unique: true` on the field definition.
 userSchema.index({ referredBy: 1 });
 
 export const User = mongoose.model<IUser>('User', userSchema);

@@ -25,6 +25,84 @@ import { getOrderStatusLabel } from '@primo/shared';
 
 const router = Router();
 
+// Shared side-effects when an order is cancelled (used by both the customer
+// self-cancel route and the admin status-change route): restore stock, refund
+// any redeemed loyalty points, and record a refund transaction. Sets the
+// cancellation fields on the order but leaves status/save to the caller.
+async function restoreOrderOnCancel(
+  order: any,
+  actorUserId: string | undefined,
+  reason?: string
+): Promise<void> {
+  order.cancelledAt = new Date();
+  if (reason) order.cancelReason = reason;
+  order.paymentStatus = 'refunded';
+
+  // Restore stock + return movements. Batch-fetch all products (avoids N+1) and
+  // restore each with an atomic $inc so concurrent stock changes aren't lost.
+  const itemProductIds = order.items.map((i: any) => i.productId);
+  const cancelProducts = await Product.find({ _id: { $in: itemProductIds } })
+    .select('_id stockQuantity')
+    .lean();
+  const stockBefore = new Map(
+    cancelProducts.map((p: any) => [p._id.toString(), p.stockQuantity])
+  );
+
+  for (const item of order.items) {
+    const key = item.productId.toString();
+    if (!stockBefore.has(key)) continue;
+
+    const previousStock = stockBefore.get(key) as number;
+    const newStock = previousStock + item.quantity;
+
+    await Product.updateOne(
+      { _id: item.productId },
+      { $inc: { stockQuantity: item.quantity, soldCount: -item.quantity } }
+    );
+
+    await StockMovement.create({
+      productId: item.productId,
+      type: 'return',
+      quantity: item.quantity,
+      previousStock,
+      newStock,
+      reason: `Order ${order.orderNumber} cancelled`,
+      reference: order.orderNumber,
+      orderId: order._id,
+      userId: actorUserId,
+    });
+  }
+
+  // Refund redeemed loyalty points back to the customer
+  if (order.pointsRedeemed && order.pointsRedeemed > 0) {
+    await User.findByIdAndUpdate(order.userId, {
+      $inc: {
+        loyaltyPoints: order.pointsRedeemed,
+        totalPointsRedeemed: -order.pointsRedeemed,
+      },
+    });
+    await PointsTransaction.create({
+      userId: order.userId,
+      type: 'refund',
+      points: order.pointsRedeemed,
+      orderId: order._id,
+      description: `Refund of ${order.pointsRedeemed} points for cancelled order ${order.orderNumber}`,
+    });
+  }
+
+  // Record refund transaction in the ledger
+  await Transaction.create({
+    type: 'debit',
+    amount: order.total,
+    category: 'order_refund',
+    description: `Refund for cancelled order ${order.orderNumber}`,
+    reference: order.orderNumber,
+    orderId: order._id,
+    date: new Date(),
+    createdBy: actorUserId,
+  });
+}
+
 // Get user's orders
 router.get(
   '/my-orders',
@@ -86,6 +164,30 @@ router.post(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { items, shippingAddress, paymentMethod, discountCode, notes, redeemPoints } = req.body;
 
+    // Double-submit guard: if the customer already created an identical order in
+    // the last 20s (double-click / retry / flaky network), return that order
+    // instead of creating a duplicate + decrementing stock twice.
+    const itemSignature = [...items]
+      .map((it: any) => `${it.productId}:${it.quantity}`)
+      .sort()
+      .join('|');
+    const recentOrder = await Order.findOne({
+      userId: req.userId,
+      createdAt: { $gte: new Date(Date.now() - 20_000) },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (recentOrder) {
+      const recentSig = (recentOrder.items || [])
+        .map((it: any) => `${it.productId}:${it.quantity}`)
+        .sort()
+        .join('|');
+      if (recentSig === itemSignature) {
+        res.status(200).json({ success: true, data: recentOrder, duplicate: true });
+        return;
+      }
+    }
+
     // Validate and get products
     const productIds = items.map((item: any) => item.productId);
     const products = await Product.find({
@@ -135,6 +237,45 @@ router.post(
       subtotal += itemPrice * item.quantity;
     }
 
+    // Atomically RESERVE stock for every item before doing anything else. A guarded
+    // $inc (decrement only when stockQuantity >= requested) makes this safe under
+    // high concurrency — it prevents overselling when many customers check out the
+    // same product at once. If any item can't be reserved, roll back the ones that
+    // were and abort so no order/charge/points side-effects happen.
+    const stockReservations: {
+      productId: any;
+      quantity: number;
+      previousStock: number;
+      newStock: number;
+      product: any;
+    }[] = [];
+    for (const item of items) {
+      const reserved = await Product.findOneAndUpdate(
+        { _id: item.productId, isActive: true, stockQuantity: { $gte: item.quantity } },
+        { $inc: { stockQuantity: -item.quantity, soldCount: item.quantity } },
+        { new: true }
+      );
+      if (!reserved) {
+        for (const r of stockReservations) {
+          await Product.updateOne(
+            { _id: r.productId },
+            { $inc: { stockQuantity: r.quantity, soldCount: -r.quantity } }
+          );
+        }
+        const p = products.find((x) => x._id.toString() === item.productId);
+        throw new BadRequestError(
+          `Insufficient stock for ${p?.title || 'an item in your cart'} — the last units were just purchased. Please update your cart and try again.`
+        );
+      }
+      stockReservations.push({
+        productId: reserved._id,
+        quantity: item.quantity,
+        previousStock: reserved.stockQuantity + item.quantity,
+        newStock: reserved.stockQuantity,
+        product: reserved,
+      });
+    }
+
     // Calculate shipping based on settings
     let shippingCost = settings.shippingFee || 50;
     if (settings.enableFreeShipping && subtotal >= (settings.freeShippingThreshold || 500)) {
@@ -151,8 +292,18 @@ router.post(
         endsAt: { $gt: new Date() },
       });
 
-      if (offer && (!offer.usageLimit || offer.usedCount < offer.usageLimit)) {
-        if (!offer.minOrderAmount || subtotal >= offer.minOrderAmount) {
+      if (offer && (!offer.minOrderAmount || subtotal >= offer.minOrderAmount)) {
+        // Atomically claim a usage slot so a limited code can never exceed its
+        // usageLimit under concurrent redemptions (check-and-increment in one op).
+        const claimed = await Offer.findOneAndUpdate(
+          offer.usageLimit
+            ? { _id: offer._id, $expr: { $lt: ['$usedCount', '$usageLimit'] } }
+            : { _id: offer._id },
+          { $inc: { usedCount: 1 } },
+          { new: true }
+        );
+
+        if (claimed) {
           if (offer.type === 'percentage') {
             promoDiscount = (subtotal * offer.value) / 100;
             if (offer.maxDiscount) {
@@ -161,9 +312,6 @@ router.post(
           } else if (offer.type === 'fixed') {
             promoDiscount = offer.value;
           }
-
-          // Increment usage count
-          await Offer.findByIdAndUpdate(offer._id, { $inc: { usedCount: 1 } });
         }
       }
     }
@@ -224,6 +372,7 @@ router.post(
       shippingCost,
       discount,
       discountCode: promoDiscount > 0 ? discountCode : (referralApplied ? 'REFERRAL' : undefined),
+      pointsRedeemed,
       taxRate,
       taxAmount,
       taxLabel,
@@ -243,38 +392,23 @@ router.post(
       estimatedDelivery: new Date(Date.now() + (settings.estimatedDeliveryDays || 3) * 24 * 60 * 60 * 1000),
     });
 
-    // Update product stock, sold count, and create stock movements
-    for (const item of items) {
-      const product = await Product.findById(item.productId);
-      if (!product) continue;
-
-      const previousStock = product.stockQuantity;
-      const newStock = previousStock - item.quantity;
-
-      product.stockQuantity = newStock;
-      product.soldCount = (product.soldCount || 0) + item.quantity;
-      await product.save();
-
-      // Create stock movement record for inventory tracking
+    // Stock was already reserved atomically above; here we only record the
+    // inventory movements and fire low-stock alerts (no further decrement).
+    for (const r of stockReservations) {
       await StockMovement.create({
-        productId: product._id,
+        productId: r.productId,
         type: 'sale',
-        quantity: item.quantity,
-        previousStock,
-        newStock,
+        quantity: r.quantity,
+        previousStock: r.previousStock,
+        newStock: r.newStock,
         reason: `Order ${order.orderNumber}`,
         reference: order.orderNumber,
         orderId: order._id,
         userId: req.userId,
       });
 
-      // Check for low stock
-      if (newStock <= product.lowStockThreshold) {
-        notifyAdminsLowStock(
-          product.title,
-          product.sku,
-          newStock
-        ).catch(console.error);
+      if (r.newStock <= r.product.lowStockThreshold) {
+        notifyAdminsLowStock(r.product.title, r.product.sku, r.newStock).catch(console.error);
       }
     }
 
@@ -341,42 +475,50 @@ router.post(
       });
 
       if (existingOrdersCount === 0) {
-        // This is the user's first order - check for pending referral
-        const pendingReferral = await Referral.findOne({
-          referee: req.userId,
-          status: 'pending',
-        });
+        // This is the user's first order — complete any pending referral.
+        const minOrderAmount = settings.referralMinOrderAmount || 500;
 
-        if (pendingReferral) {
-          // Get settings for minimum order amount (default 500)
-          const minOrderAmount = settings.referralMinOrderAmount || 500;
+        if (total >= minOrderAmount) {
+          // Atomically flip the referral to completed (status:'pending' guard) so
+          // two concurrent first-orders can never complete it twice / double-credit.
+          const completedReferral = await Referral.findOneAndUpdate(
+            { referee: req.userId, status: 'pending' },
+            {
+              $set: {
+                status: 'completed',
+                orderAmount: total,
+                orderId: order._id,
+                completedAt: new Date(),
+              },
+            },
+            { new: true }
+          );
 
-          if (total >= minOrderAmount) {
-            // Complete the referral
-            pendingReferral.status = 'completed';
-            pendingReferral.orderAmount = total;
-            pendingReferral.orderId = order._id;
-            pendingReferral.completedAt = new Date();
-            await pendingReferral.save();
-
-            // Credit the referrer with rewards
-            await User.findByIdAndUpdate(pendingReferral.referrer, {
+          if (completedReferral) {
+            // Credit the referrer with rewards (atomic)
+            await User.findByIdAndUpdate(completedReferral.referrer, {
               $inc: {
-                referralCredits: pendingReferral.referrerReward || 100,
+                referralCredits: completedReferral.referrerReward || 100,
                 successfulReferrals: 1,
               },
             });
 
-            // Award referral bonus loyalty points
+            // Award referral bonus loyalty points (atomic, respects frozen flag)
             if (settings.enableLoyaltyProgram && settings.referralBonusPoints > 0) {
-              const referrer = await User.findById(pendingReferral.referrer);
-              if (referrer && !referrer.pointsFrozen) {
-                referrer.loyaltyPoints += settings.referralBonusPoints;
-                referrer.totalPointsEarned += settings.referralBonusPoints;
-                await referrer.save();
+              const updatedReferrer = await User.findOneAndUpdate(
+                { _id: completedReferral.referrer, pointsFrozen: { $ne: true } },
+                {
+                  $inc: {
+                    loyaltyPoints: settings.referralBonusPoints,
+                    totalPointsEarned: settings.referralBonusPoints,
+                  },
+                },
+                { new: true }
+              );
 
+              if (updatedReferrer) {
                 await PointsTransaction.create({
-                  userId: referrer._id,
+                  userId: completedReferral.referrer,
                   type: 'earned_referral',
                   points: settings.referralBonusPoints,
                   description: `Earned ${settings.referralBonusPoints} bonus points for successful referral`,
@@ -384,7 +526,7 @@ router.post(
               }
             }
 
-            console.log(`Referral completed: Referrer ${pendingReferral.referrer} credited for order ${order.orderNumber}`);
+            console.log(`Referral completed: Referrer ${completedReferral.referrer} credited for order ${order.orderNumber}`);
           }
         }
       }
@@ -454,6 +596,66 @@ router.post(
       success: true,
       message: 'Items added to cart',
       data: { itemsAdded: cart.items.length },
+    });
+  })
+);
+
+// Cancel an order (customer self-service). Allowed only while the order is
+// still cancellable (not yet being prepared/shipped). Restores stock and
+// refunds any redeemed loyalty points.
+router.post(
+  '/:id/cancel',
+  authenticate,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    const query: any = { $or: [{ orderNumber: id }], userId: req.userId };
+    if (mongoose.Types.ObjectId.isValid(id)) query.$or.push({ _id: id });
+
+    const order = await Order.findOne(query);
+    if (!order) {
+      throw new NotFoundError('Order');
+    }
+
+    const cancellable = ['new', 'accepted'];
+    if (!cancellable.includes(order.status)) {
+      throw new BadRequestError(
+        `Order can no longer be cancelled (current status: ${order.status}). Please contact support.`
+      );
+    }
+
+    const oldStatus = order.status;
+    await restoreOrderOnCancel(order, req.userId, reason || 'Cancelled by customer');
+    order.status = 'cancelled';
+    order.statusHistory.push({
+      status: 'cancelled',
+      timestamp: new Date(),
+      updatedBy: new mongoose.Types.ObjectId(req.userId),
+    } as any);
+    await order.save();
+
+    await AuditLog.create({
+      userId: req.userId,
+      action: 'status_change',
+      resource: 'order',
+      resourceId: order._id.toString(),
+      oldValue: { status: oldStatus },
+      newValue: { status: 'cancelled', reason: reason || 'Cancelled by customer' },
+    });
+
+    // Notify admins/customer of the cancellation
+    notifyOrderStatusChange(
+      order.userId.toString(),
+      order.orderNumber,
+      'cancelled',
+      getOrderStatusLabel('cancelled')
+    ).catch(console.error);
+
+    res.json({
+      success: true,
+      message: 'Order cancelled successfully',
+      data: { orderNumber: order.orderNumber, status: order.status },
     });
   })
 );
@@ -640,47 +842,8 @@ router.patch(
     }
 
     if (status === 'cancelled') {
-      order.cancelledAt = new Date();
-      order.cancelReason = note;
-      order.paymentStatus = 'refunded';
-
-      // Restore stock and create return movements
-      for (const item of order.items) {
-        const product = await Product.findById(item.productId);
-        if (!product) continue;
-
-        const previousStock = product.stockQuantity;
-        const newStock = previousStock + item.quantity;
-
-        product.stockQuantity = newStock;
-        product.soldCount = Math.max(0, (product.soldCount || 0) - item.quantity);
-        await product.save();
-
-        // Create return stock movement
-        await StockMovement.create({
-          productId: product._id,
-          type: 'return',
-          quantity: item.quantity,
-          previousStock,
-          newStock,
-          reason: `Order ${order.orderNumber} cancelled`,
-          reference: order.orderNumber,
-          orderId: order._id,
-          userId: req.userId,
-        });
-      }
-
-      // Create refund transaction
-      await Transaction.create({
-        type: 'debit',
-        amount: order.total,
-        category: 'order_refund',
-        description: `Refund for cancelled order ${order.orderNumber}`,
-        reference: order.orderNumber,
-        orderId: order._id,
-        date: new Date(),
-        createdBy: req.userId,
-      });
+      // Restore stock, refund redeemed loyalty points, and record the refund.
+      await restoreOrderOnCancel(order, req.userId, note);
     }
 
     await order.save();

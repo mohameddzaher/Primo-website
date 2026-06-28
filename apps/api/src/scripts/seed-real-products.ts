@@ -1443,6 +1443,25 @@ async function main() {
   let updated = 0;
   let errors = 0;
 
+  // Real EGP prices per SKU (the product definitions ship with price: 0 so the
+  // catalogue can be priced here without editing every block). Adjust freely.
+  const PRICE_BY_SKU: Record<string, number> = {
+    'JOY-FDD-02901': 1200, 'MLAY-T14-A': 3500, 'MLAY-T14-B': 4200, 'DELONGHI-EC685': 12000,
+    'BRAUN-WK5110BK': 1800, 'KENWOOD-ZJG08000CL': 1500, 'KENWOOD-ZJM01AOBK': 1300,
+    'ARZUM-OK008WFU': 4500, 'ARZUM-OKKA-MINI': 3200, 'ARZUM-OK0026': 5500, 'ARZUM-OK0038': 6200,
+    'ARZUM-OK0032': 3800, 'ARZUM-ESPRESSO-SOLO': 4000, 'BISSELL-PARTS-KIT': 600, 'KARCHER-SC3EF': 7500,
+    'BISSELL-39N7V': 2800, 'BNDECKER-BHSM1': 2200, 'KENWOOD-GRILL-ELEC': 2500, 'ARZUM-AR2092': 2900,
+    'NINJA-CREAMI-DELUXE': 9500, 'ALSAIF-E05331': 900, 'ALSAIF-SANDWICH-2IN1': 1100, 'NINJA-FS301ME': 8500,
+    'EDISON-SBM001': 1400, 'ALSAIF-CHURROS': 1000, 'GIBSON-DISPENSER': 6000, 'HAAM-DISPENSER': 5500,
+    'PANASONIC-DISPENSER': 7000,
+  };
+  // Percentage discounts for a few items so the "On Sale" rail is populated.
+  const DISCOUNT_BY_SKU: Record<string, number> = {
+    'DELONGHI-EC685': 20, 'ARZUM-OK0038': 15, 'KARCHER-SC3EF': 25,
+    'NINJA-CREAMI-DELUXE': 18, 'MLAY-T14-A': 12, 'BRAUN-WK5110BK': 10, 'NINJA-FS301ME': 20,
+  };
+  const discountEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
   for (const def of PRODUCTS) {
     try {
       const catId = categoryMap.get(def.category);
@@ -1463,9 +1482,16 @@ async function main() {
         shortDescription: def.shortDescription,
         specs: def.specs,
         warranty: def.warranty,
-        price: def.price,
-        ...(def.compareAtPrice !== undefined && { compareAtPrice: def.compareAtPrice }),
-        ...(def.discount !== undefined && { discount: def.discount }),
+        price: PRICE_BY_SKU[def.sku] ?? def.price,
+        ...(DISCOUNT_BY_SKU[def.sku]
+          ? {
+              discount: DISCOUNT_BY_SKU[def.sku],
+              compareAtPrice: PRICE_BY_SKU[def.sku] ?? def.price,
+              discountEndsAt,
+            }
+          : def.compareAtPrice !== undefined
+          ? { compareAtPrice: def.compareAtPrice }
+          : {}),
         stockQuantity: def.stockQuantity,
         lowStockThreshold: def.lowStockThreshold,
         images: def.images,

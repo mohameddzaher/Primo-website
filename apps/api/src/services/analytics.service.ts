@@ -6,6 +6,7 @@ import { Order } from '../models/Order';
 import { User } from '../models/User';
 import { Product } from '../models/Product';
 import { Review } from '../models/Review';
+import { cached } from '../utils/cache';
 
 interface DashboardStats {
   totalUsers: number;
@@ -56,7 +57,15 @@ interface OrderStatusDistribution {
 }
 
 // Get dashboard statistics
+// Cached wrapper — the dashboard runs ~9 aggregations, so serve it from a short
+// (60s) cache to avoid re-running them on every poll / every concurrent admin.
 export const getDashboardStats = async (fullAccess = false): Promise<DashboardStats> => {
+  return cached(`dashboard:stats:${fullAccess}`, 60_000, () =>
+    computeDashboardStats(fullAccess)
+  );
+};
+
+const computeDashboardStats = async (fullAccess = false): Promise<DashboardStats> => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 

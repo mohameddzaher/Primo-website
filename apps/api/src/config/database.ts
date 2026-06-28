@@ -10,9 +10,14 @@ export const connectDatabase = async (): Promise<void> => {
     mongoose.set('strictQuery', true);
 
     const options: mongoose.ConnectOptions = {
-      maxPoolSize: 10,
+      // Connection pool sized for high concurrency. Each app instance keeps up to
+      // maxPoolSize sockets open to MongoDB; 10 is far too small under load and
+      // causes request queueing. Tune via DB_POOL_SIZE env if needed.
+      maxPoolSize: parseInt(process.env.DB_POOL_SIZE || '50', 10),
+      minPoolSize: parseInt(process.env.DB_MIN_POOL_SIZE || '5', 10),
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
+      family: 4, // Force IPv4 — avoids slow IPv6 resolution attempts on some networks
     };
 
     await mongoose.connect(config.mongoUri, options);
