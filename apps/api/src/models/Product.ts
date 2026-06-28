@@ -267,6 +267,13 @@ productSchema.index({ createdAt: -1 });
 productSchema.index({ categoryId: 1, isActive: 1 });
 productSchema.index({ brand: 1, isActive: 1 });
 productSchema.index({ tags: 1 });
+// Compound indexes for the public storefront list queries (always filtered by
+// isActive, then a facet + a sort). These let MongoDB serve listing pages from
+// an index instead of collection scans under high traffic.
+productSchema.index({ isActive: 1, isFeatured: 1, soldCount: -1 }); // featured rail
+productSchema.index({ isActive: 1, createdAt: -1 }); // new arrivals / default
+productSchema.index({ isActive: 1, discount: 1, discountEndsAt: 1 }); // on-sale facet
+productSchema.index({ isActive: 1, categoryId: 1, soldCount: -1 }); // category pages
 productSchema.index(
   { title: 'text', description: 'text', brand: 'text', tags: 'text' },
   { weights: { title: 10, brand: 5, tags: 3, description: 1 } }

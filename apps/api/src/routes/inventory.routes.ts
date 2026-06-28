@@ -206,30 +206,43 @@ router.patch(
       throw new NotFoundError('Product');
     }
 
-    const previousStock = product.stockQuantity;
-    let newStock: number;
-
-    switch (type) {
-      case 'set':
-        newStock = quantity;
-        break;
-      case 'add':
-        newStock = previousStock + quantity;
-        break;
-      case 'subtract':
-        newStock = previousStock - quantity;
-        break;
-      default:
-        newStock = previousStock;
+    // Apply the adjustment ATOMICALLY so it can't clobber a concurrent order's
+    // stock decrement (read-then-write would lose updates under load).
+    let updated;
+    if (type === 'set') {
+      if (quantity < 0) throw new BadRequestError('Stock quantity cannot be negative');
+      updated = await Product.findByIdAndUpdate(
+        id,
+        { $set: { stockQuantity: quantity } },
+        { new: true }
+      );
+    } else if (type === 'add') {
+      updated = await Product.findByIdAndUpdate(
+        id,
+        { $inc: { stockQuantity: quantity } },
+        { new: true }
+      );
+    } else {
+      // subtract — guarded so stock never goes negative even under concurrency
+      updated = await Product.findOneAndUpdate(
+        { _id: id, stockQuantity: { $gte: quantity } },
+        { $inc: { stockQuantity: -quantity } },
+        { new: true }
+      );
+      if (!updated) {
+        throw new BadRequestError('Insufficient stock for this adjustment');
+      }
     }
 
-    if (newStock < 0) {
-      throw new BadRequestError('Stock quantity cannot be negative');
-    }
+    const newStock = updated!.stockQuantity;
+    const previousStock =
+      type === 'set' ? product.stockQuantity
+      : type === 'add' ? newStock - quantity
+      : newStock + quantity;
 
     // Create stock movement record
     await StockMovement.create({
-      productId: product._id,
+      productId: updated!._id,
       type: 'adjustment',
       quantity,
       previousStock,
@@ -238,19 +251,15 @@ router.patch(
       userId: req.user!._id,
     });
 
-    // Update product stock
-    product.stockQuantity = newStock;
-    await product.save();
-
     res.json({
       success: true,
       data: {
-        _id: product._id,
-        title: product.title,
-        sku: product.sku,
+        _id: updated!._id,
+        title: updated!.title,
+        sku: updated!.sku,
         previousStock,
         newStock,
-        stockQuantity: product.stockQuantity,
+        stockQuantity: newStock,
       },
     });
   })

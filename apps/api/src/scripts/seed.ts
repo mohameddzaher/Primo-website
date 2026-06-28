@@ -1073,7 +1073,7 @@ Look for ENERGY STAR certification. A more efficient fridge saves money long-ter
       image: blogImages[0],
       author: 'PRIMO Team',
       tags: ['refrigerator', 'buying-guide', 'home-appliances'],
-      status: 'published',
+      isPublished: true,
       publishedAt: new Date(),
     },
     {
@@ -1119,7 +1119,7 @@ Annual checkups for major appliances can prevent costly repairs.
       image: blogImages[1],
       author: 'PRIMO Team',
       tags: ['maintenance', 'tips', 'home-appliances'],
-      status: 'published',
+      isPublished: true,
       publishedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
     },
     {
@@ -1167,7 +1167,7 @@ Smart appliances make sense for frequently used items where remote control adds 
       image: blogImages[2],
       author: 'PRIMO Team',
       tags: ['smart-home', 'technology', 'buying-guide'],
-      status: 'published',
+      isPublished: true,
       publishedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
     },
   ]);

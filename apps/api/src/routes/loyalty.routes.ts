@@ -143,10 +143,17 @@ router.post(
       ? Math.floor(points / settings.pointsRedemptionRate)
       : 0;
 
-    // Deduct points
-    user.loyaltyPoints -= points;
-    user.totalPointsRedeemed += points;
-    await user.save();
+    // Deduct points ATOMICALLY with a balance guard so two concurrent redeem
+    // requests can never double-spend the same points.
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: user._id, pointsFrozen: { $ne: true }, loyaltyPoints: { $gte: points } },
+      { $inc: { loyaltyPoints: -points, totalPointsRedeemed: points } },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      throw new BadRequestError('Insufficient points');
+    }
 
     // Create transaction record
     await PointsTransaction.create({
@@ -162,7 +169,7 @@ router.post(
       data: {
         pointsRedeemed: points,
         discountValue,
-        remainingBalance: user.loyaltyPoints,
+        remainingBalance: updatedUser.loyaltyPoints,
       },
     });
   })

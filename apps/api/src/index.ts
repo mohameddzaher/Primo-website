@@ -10,9 +10,11 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+import http from 'http';
+import mongoose from 'mongoose';
 
 import { config, validateConfig } from './config';
-import { connectDatabase } from './config/database';
+import { connectDatabase, disconnectDatabase } from './config/database';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 // Import routes
@@ -91,14 +93,40 @@ const limiter = rateLimit({
 // Apply rate limiting to API routes
 app.use('/api', limiter);
 
+// Stricter limiter for authentication endpoints to blunt credential-stuffing /
+// brute-force attacks. Only FAILED attempts count (skipSuccessfulRequests), so
+// legitimate users are never throttled by their own successful logins.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: config.isDev ? 100 : 20,
+  message: {
+    success: false,
+    error: 'Too many authentication attempts. Please try again in a few minutes.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+});
+const API_AUTH_PREFIX = `/api/${config.apiVersion}/auth`;
+app.use(`${API_AUTH_PREFIX}/login`, authLimiter);
+app.use(`${API_AUTH_PREFIX}/register`, authLimiter);
+app.use(`${API_AUTH_PREFIX}/forgot-password`, authLimiter);
+app.use(`${API_AUTH_PREFIX}/reset-password`, authLimiter);
+
 // Static files for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Health check endpoint
+// Health / readiness endpoint — reports DB connectivity so load balancers and
+// orchestrators (k8s, ECS) can route traffic only to healthy instances.
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({
-    success: true,
-    status: 'healthy',
+  const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  const dbState = mongoose.connection.readyState;
+  const healthy = dbState === 1;
+  res.status(healthy ? 200 : 503).json({
+    success: healthy,
+    status: healthy ? 'healthy' : 'degraded',
+    db: states[dbState] || 'unknown',
+    uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     environment: config.env,
   });
@@ -164,13 +192,14 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Database connection and server start
+let server: http.Server;
 const startServer = async (): Promise<void> => {
   try {
     // Connect to MongoDB
     await connectDatabase();
 
     // Start server
-    app.listen(config.port, () => {
+    server = app.listen(config.port, () => {
       console.log(`
 ╔═══════════════════════════════════════════════╗
 ║                                               ║
@@ -201,16 +230,29 @@ process.on('unhandledRejection', (reason: unknown) => {
   process.exit(1);
 });
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
-  process.exit(0);
-});
+// Graceful shutdown: stop accepting new connections, let in-flight requests
+// finish, close the DB, then exit. Critical for zero-downtime rolling deploys
+// under load — abruptly exiting would drop requests mid-flight.
+const gracefulShutdown = (signal: string): void => {
+  console.log(`${signal} received. Shutting down gracefully...`);
+  if (!server) {
+    process.exit(0);
+    return;
+  }
+  server.close(async () => {
+    await disconnectDatabase();
+    console.log('Closed out remaining connections. Exiting.');
+    process.exit(0);
+  });
+  // Failsafe: force-exit if connections don't drain within 10s
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcing shutdown.');
+    process.exit(1);
+  }, 10000).unref();
+};
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received. Shutting down gracefully...');
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Start the server
 startServer();

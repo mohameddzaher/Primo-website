@@ -7,7 +7,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IPointsTransaction extends Document {
   _id: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
-  type: 'earned_purchase' | 'earned_referral' | 'redeemed' | 'adjusted' | 'expired';
+  type: 'earned_purchase' | 'earned_referral' | 'redeemed' | 'adjusted' | 'expired' | 'refund';
   points: number; // positive for earn, negative for redeem
   orderId?: mongoose.Types.ObjectId;
   description: string;
@@ -25,7 +25,7 @@ const pointsTransactionSchema = new Schema<IPointsTransaction>(
     },
     type: {
       type: String,
-      enum: ['earned_purchase', 'earned_referral', 'redeemed', 'adjusted', 'expired'],
+      enum: ['earned_purchase', 'earned_referral', 'redeemed', 'adjusted', 'expired', 'refund'],
       required: true,
     },
     points: {
