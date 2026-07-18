@@ -30,49 +30,57 @@ import {
 } from '@/components/ui';
 import { formatCurrency, getDiscountedPrice } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
+import { PaymentMethods } from '@/components/PaymentMethods';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { useI18n } from '@/lib/i18n';
+import type { TranslationKey } from '@/lib/i18n';
 import toast from 'react-hot-toast';
 
-const checkoutSchema = z.object({
-  fullName: z.string().min(2, 'Full name is required'),
-  email: z.string().email('Valid email is required'),
-  phone: z.string().min(10, 'Valid phone number is required'),
-  fullAddress: z.string().min(10, 'Please enter a complete address'),
-  city: z.string().min(2, 'City is required'),
-  area: z.string().min(2, 'Area is required'),
-  building: z.string().optional(),
-  floor: z.string().optional(),
-  apartment: z.string().optional(),
-  landmark: z.string().optional(),
-  notes: z.string().optional(),
-  paymentMethod: z.enum(['cash_on_delivery', 'card', 'apple_pay']),
-});
+type Translate = (key: TranslationKey, vars?: Record<string, string | number>) => string;
 
-type CheckoutForm = z.infer<typeof checkoutSchema>;
+// Built per-render so validation messages follow the active locale.
+const buildCheckoutSchema = (t: Translate) =>
+  z.object({
+    fullName: z.string().min(2, t('shop.validation.fullNameRequired')),
+    email: z.string().email(t('shop.validation.emailInvalid')),
+    phone: z.string().min(10, t('shop.validation.phoneInvalid')),
+    fullAddress: z.string().min(10, t('shop.validation.addressIncomplete')),
+    city: z.string().min(2, t('shop.validation.cityRequired')),
+    area: z.string().min(2, t('shop.validation.areaRequired')),
+    building: z.string().optional(),
+    floor: z.string().optional(),
+    apartment: z.string().optional(),
+    landmark: z.string().optional(),
+    notes: z.string().optional(),
+    paymentMethod: z.enum(['cash_on_delivery', 'card', 'apple_pay']),
+  });
+
+type CheckoutForm = z.infer<ReturnType<typeof buildCheckoutSchema>>;
 
 const paymentMethods = [
   {
     id: 'cash_on_delivery' as const,
-    name: 'Cash on Delivery',
+    nameKey: 'checkout.cashOnDelivery' as TranslationKey,
     icon: HiOutlineCash,
-    description: 'Pay when you receive your order',
+    descriptionKey: 'shop.checkout.codDesc' as TranslationKey,
   },
   {
     id: 'card' as const,
-    name: 'Credit/Debit Card',
+    nameKey: 'checkout.card' as TranslationKey,
     icon: HiOutlineCreditCard,
-    description: 'Secure payment via Paymob',
+    descriptionKey: 'shop.checkout.cardDesc' as TranslationKey,
   },
   {
     id: 'apple_pay' as const,
-    name: 'Apple Pay',
+    nameKey: 'checkout.applePay' as TranslationKey,
     icon: FaApple,
-    description: 'Quick payment with Apple Pay',
+    descriptionKey: 'shop.checkout.applePayDesc' as TranslationKey,
   },
 ];
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const { user, isAuthenticated } = useAuthStore();
   const { items, getSubtotal, discountCode, clearCart, setDiscount, clearDiscount, getDiscountAmount } = useCartStore();
   const discountAmount = getDiscountAmount();
@@ -165,6 +173,12 @@ export default function CheckoutPage() {
   const taxAmount = taxRate > 0 ? Math.round((taxableAmount * taxRate) / 100 * 100) / 100 : 0;
   const finalTotal = Math.max(0, subtotal - totalDiscount + shippingFee + taxAmount);
 
+  // BNPL (tabby / tamara) messaging — DISPLAY ONLY, pending gateway integration.
+  // No BNPL provider is wired up yet, so this is informational copy and is
+  // deliberately not offered as a selectable payment method. Does not affect
+  // any pricing math.
+  const bnplInstallment = Math.round((finalTotal / 4) * 100) / 100;
+
   // Calculate max redeemable points
   const maxRedeemableByBalance = loyaltyPoints;
   const maxRedeemableByOrder = maxPointsPerOrder > 0 ? maxPointsPerOrder : Infinity;
@@ -179,7 +193,7 @@ export default function CheckoutPage() {
     watch,
     formState: { errors },
   } = useForm<CheckoutForm>({
-    resolver: zodResolver(checkoutSchema),
+    resolver: zodResolver(buildCheckoutSchema(t)),
     defaultValues: {
       paymentMethod: 'cash_on_delivery',
     },
@@ -228,7 +242,7 @@ export default function CheckoutPage() {
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported');
+      toast.error(t('shop.toast.geoUnsupported'));
       return;
     }
 
@@ -239,18 +253,18 @@ export default function CheckoutPage() {
           const { latitude, longitude } = position.coords;
           const mockAddress = `Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
           setValue('fullAddress', mockAddress);
-          setValue('city', 'Cairo');
-          setValue('area', 'New Cairo');
-          toast.success('Location detected!');
+          setValue('city', 'Riyadh');
+          setValue('area', 'Al Olaya');
+          toast.success(t('shop.toast.locationDetected'));
         } catch (error) {
-          toast.error(getApiErrorMessage(error, 'Failed to get address'));
+          toast.error(getApiErrorMessage(error, t('shop.toast.addressFailed')));
         } finally {
           setIsLocating(false);
         }
       },
       (error) => {
         setIsLocating(false);
-        toast.error(getApiErrorMessage(error, 'Failed to get location'));
+        toast.error(getApiErrorMessage(error, t('shop.toast.locationFailed')));
       }
     );
   };
@@ -262,10 +276,10 @@ export default function CheckoutPage() {
       const result = await cartApi.applyDiscount(promoCode);
       const discountVal = result.discountAmount || 0;
       setDiscount(promoCode.toUpperCase(), discountVal, result.discountType, result.discountValue, result.maxDiscount);
-      toast.success('Promo code applied!');
+      toast.success(t('shop.toast.promoApplied'));
       setPromoCode('');
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Invalid promo code');
+      toast.error(error.response?.data?.message || t('shop.toast.invalidPromo'));
     } finally {
       setIsApplyingPromo(false);
     }
@@ -275,15 +289,15 @@ export default function CheckoutPage() {
     try {
       await cartApi.removeDiscount();
       clearDiscount();
-      toast.success('Promo code removed');
+      toast.success(t('shop.toast.promoRemoved'));
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Failed to remove promo code'));
+      toast.error(getApiErrorMessage(error, t('shop.toast.promoRemoveFailed')));
     }
   };
 
   const onSubmit = async (data: CheckoutForm) => {
     if (items.length === 0) {
-      toast.error('Your cart is empty');
+      toast.error(t('cart.empty'));
       return;
     }
 
@@ -293,6 +307,9 @@ export default function CheckoutPage() {
         items: items.map(item => ({
           productId: item.productId,
           quantity: item.quantity,
+          // Forward the chosen option so the server prices and reserves stock
+          // against that exact variant rather than the product default.
+          ...(item.variantId ? { variantId: item.variantId } : {}),
         })),
         shippingAddress: {
           fullName: data.fullName,
@@ -322,10 +339,10 @@ export default function CheckoutPage() {
         // Backend cart might already be cleared by order creation
       }
       clearCart();
-      toast.success('Order placed successfully!');
+      toast.success(t('checkout.orderPlaced'));
     } catch (error: any) {
       console.error('Order error:', error.response?.data);
-      toast.error(getApiErrorMessage(error, 'Failed to place order'));
+      toast.error(getApiErrorMessage(error, t('shop.toast.orderFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -345,36 +362,38 @@ export default function CheckoutPage() {
               <HiCheck className="w-10 h-10 text-success-500" />
             </div>
             <h1 className="mt-6 text-2xl font-semibold text-dark-900">
-              Order Confirmed!
+              {t('shop.checkout.orderConfirmed')}
             </h1>
             <p className="mt-2 text-dark-500">
-              Thank you for your order. We&apos;ll send you a confirmation email shortly.
+              {t('shop.checkout.orderThanks')}
             </p>
 
-            <div className="mt-6 p-4 bg-beige-50 rounded-lg text-left">
+            <div className="mt-6 p-4 bg-beige-50 rounded-lg text-start">
               <div className="flex justify-between text-sm">
-                <span className="text-dark-500">Order ID</span>
-                <span className="font-mono font-medium">{orderComplete.orderNumber}</span>
+                <span className="text-dark-500">{t('order.orderNumber')}</span>
+                <span className="font-mono font-medium ltr-nums">{orderComplete.orderNumber}</span>
               </div>
               <div className="flex justify-between text-sm mt-2">
-                <span className="text-dark-500">Total</span>
-                <span className="font-semibold">{formatCurrency(orderComplete.total)}</span>
+                <span className="text-dark-500">{t('cart.total')}</span>
+                <span className="font-semibold ltr-nums">{formatCurrency(orderComplete.total)}</span>
               </div>
               <div className="flex justify-between text-sm mt-2">
-                <span className="text-dark-500">Payment</span>
+                <span className="text-dark-500">{t('shop.checkout.payment')}</span>
                 <Badge variant={orderComplete.paymentMethod === 'cash_on_delivery' ? 'warning' : 'success'}>
-                  {orderComplete.paymentMethod === 'cash_on_delivery' ? 'Pay on Delivery' : 'Paid'}
+                  {orderComplete.paymentMethod === 'cash_on_delivery'
+                    ? t('checkout.cashOnDelivery')
+                    : t('shop.checkout.paid')}
                 </Badge>
               </div>
             </div>
 
             <div className="mt-8 space-y-3">
               <Link href={`/account/orders/${orderComplete.orderNumber}`}>
-                <Button fullWidth>View Order Details</Button>
+                <Button fullWidth>{t('shop.checkout.viewOrderDetails')}</Button>
               </Link>
               <Link href="/products">
                 <Button variant="secondary" fullWidth>
-                  Continue Shopping
+                  {t('common.continueShopping')}
                 </Button>
               </Link>
             </div>
@@ -389,10 +408,10 @@ export default function CheckoutPage() {
     return (
       <div className="min-h-screen bg-beige-50 flex items-center justify-center py-12 px-4">
         <Card padding="lg" className="text-center max-w-md">
-          <h1 className="text-xl font-semibold text-dark-900">Your cart is empty</h1>
-          <p className="mt-2 text-dark-500">Add some products before checkout</p>
+          <h1 className="text-xl font-semibold text-dark-900">{t('cart.empty')}</h1>
+          <p className="mt-2 text-dark-500">{t('shop.checkout.emptyHint')}</p>
           <Link href="/products">
-            <Button className="mt-4">Browse Products</Button>
+            <Button className="mt-4">{t('shop.browseProducts')}</Button>
           </Link>
         </Card>
       </div>
@@ -403,15 +422,15 @@ export default function CheckoutPage() {
     <div className="min-h-screen bg-beige-50">
       <div className="container-custom py-8">
         <Link
-          href="/account/cart"
+          href="/cart"
           className="inline-flex items-center gap-2 text-sm text-dark-500 hover:text-dark-700 mb-6"
         >
-          <HiArrowLeft size={16} />
-          Back to Cart
+          <HiArrowLeft className="rtl-flip" size={16} />
+          {t('shop.checkout.backToCart')}
         </Link>
 
         <h1 className="text-2xl font-display font-semibold text-dark-900 mb-8">
-          Checkout
+          {t('checkout.title')}
         </h1>
 
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -421,24 +440,24 @@ export default function CheckoutPage() {
               {/* Contact Info */}
               <Card padding="md">
                 <h2 className="font-semibold text-dark-900 mb-4">
-                  Contact Information
+                  {t('shop.checkout.contactInfo')}
                 </h2>
                 <div className="grid md:grid-cols-2 gap-4">
                   <Input
-                    label="Full Name"
-                    placeholder="John Doe"
+                    label={t('checkout.fullName')}
+                    placeholder={t('shop.placeholder.fullName')}
                     error={errors.fullName?.message}
                     {...register('fullName')}
                   />
                   <Input
-                    label="Phone Number"
+                    label={t('checkout.phone')}
                     type="tel"
-                    placeholder="+20 123 456 7890"
+                    placeholder="+966 5X XXX XXXX"
                     error={errors.phone?.message}
                     {...register('phone')}
                   />
                   <Input
-                    label="Email"
+                    label={t('checkout.email')}
                     type="email"
                     placeholder="you@example.com"
                     className="md:col-span-2"
@@ -452,7 +471,7 @@ export default function CheckoutPage() {
               {savedAddresses.length > 0 && (
                 <Card padding="md">
                   <h2 className="font-semibold text-dark-900 mb-4">
-                    Saved Addresses
+                    {t('shop.checkout.savedAddresses')}
                   </h2>
                   <div className="grid md:grid-cols-2 gap-3">
                     {savedAddresses.map((address: any) => (
@@ -463,7 +482,7 @@ export default function CheckoutPage() {
                           fillAddressForm(address);
                           setSelectedAddressId(address._id);
                         }}
-                        className={`p-4 text-left rounded-lg border-2 transition-all ${
+                        className={`p-4 text-start rounded-lg border-2 transition-all ${
                           selectedAddressId === address._id
                             ? 'border-primary-600 bg-primary-50'
                             : 'border-beige-200 hover:border-beige-300'
@@ -485,7 +504,7 @@ export default function CheckoutPage() {
               {/* Shipping Address */}
               <Card padding="md">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold text-dark-900">Shipping Address</h2>
+                  <h2 className="font-semibold text-dark-900">{t('checkout.shippingAddress')}</h2>
                   <Button
                     type="button"
                     variant="ghost"
@@ -494,51 +513,51 @@ export default function CheckoutPage() {
                     onClick={handleGetLocation}
                     isLoading={isLocating}
                   >
-                    Use My Location
+                    {t('shop.checkout.useMyLocation')}
                   </Button>
                 </div>
                 <div className="space-y-4">
                   <Textarea
-                    label="Full Address"
-                    placeholder="Street address, building number..."
+                    label={t('shop.checkout.fullAddress')}
+                    placeholder={t('shop.placeholder.address')}
                     rows={2}
                     error={errors.fullAddress?.message}
                     {...register('fullAddress')}
                   />
                   <div className="grid md:grid-cols-2 gap-4">
                     <Input
-                      label="City"
-                      placeholder="Cairo"
+                      label={t('checkout.city')}
+                      placeholder={t('shop.placeholder.city')}
                       error={errors.city?.message}
                       {...register('city')}
                     />
                     <Input
-                      label="Area"
-                      placeholder="Nasr City"
+                      label={t('checkout.area')}
+                      placeholder={t('shop.placeholder.area')}
                       error={errors.area?.message}
                       {...register('area')}
                     />
                   </div>
                   <div className="grid md:grid-cols-3 gap-4">
                     <Input
-                      label="Building (Optional)"
+                      label={t('shop.checkout.building')}
                       placeholder="12A"
                       {...register('building')}
                     />
                     <Input
-                      label="Floor (Optional)"
+                      label={t('shop.checkout.floor')}
                       placeholder="3"
                       {...register('floor')}
                     />
                     <Input
-                      label="Apartment (Optional)"
+                      label={t('shop.checkout.apartment')}
                       placeholder="15"
                       {...register('apartment')}
                     />
                   </div>
                   <Input
-                    label="Landmark (Optional)"
-                    placeholder="Near the mall..."
+                    label={t('shop.checkout.landmark')}
+                    placeholder={t('shop.placeholder.landmark')}
                     {...register('landmark')}
                   />
                 </div>
@@ -546,7 +565,14 @@ export default function CheckoutPage() {
 
               {/* Payment Method */}
               <Card padding="md">
-                <h2 className="font-semibold text-dark-900 mb-4">Payment Method</h2>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <h2 className="font-semibold text-dark-900">{t('checkout.paymentMethod')}</h2>
+                  <PaymentMethods
+                    includeCOD={settings.enableCOD}
+                    label={t('checkout.acceptedPayments')}
+                    labelClassName="text-dark-400"
+                  />
+                </div>
                 <div className="space-y-3">
                   {paymentMethods.map((method) => (
                     <label
@@ -573,8 +599,8 @@ export default function CheckoutPage() {
                         <method.icon size={20} />
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium text-dark-900">{method.name}</p>
-                        <p className="text-sm text-dark-500">{method.description}</p>
+                        <p className="font-medium text-dark-900">{t(method.nameKey)}</p>
+                        <p className="text-sm text-dark-500">{t(method.descriptionKey)}</p>
                       </div>
                       {selectedPayment === method.id && (
                         <HiCheck className="text-primary-600" size={20} />
@@ -584,7 +610,7 @@ export default function CheckoutPage() {
                 </div>
                 {(selectedPayment === 'card' || selectedPayment === 'apple_pay') && (
                   <p className="mt-4 p-3 bg-warning-50 rounded-lg text-sm text-warning-700">
-                    Note: Online payment will be processed after order confirmation.
+                    {t('shop.checkout.onlinePaymentNote')}
                   </p>
                 )}
               </Card>
@@ -592,10 +618,10 @@ export default function CheckoutPage() {
               {/* Notes */}
               <Card padding="md">
                 <h2 className="font-semibold text-dark-900 mb-4">
-                  Order Notes (Optional)
+                  {t('shop.checkout.orderNotesOptional')}
                 </h2>
                 <Textarea
-                  placeholder="Any special instructions for delivery..."
+                  placeholder={t('shop.placeholder.orderNotes')}
                   rows={3}
                   {...register('notes')}
                 />
@@ -605,7 +631,7 @@ export default function CheckoutPage() {
             {/* Order Summary */}
             <div>
               <Card padding="md" className="sticky top-24">
-                <h2 className="font-semibold text-dark-900 mb-4">Order Summary</h2>
+                <h2 className="font-semibold text-dark-900 mb-4">{t('cart.orderSummary')}</h2>
 
                 {/* Items */}
                 <div className="space-y-3 max-h-60 overflow-y-auto">
@@ -631,9 +657,9 @@ export default function CheckoutPage() {
                             {item.product.title}
                           </p>
                           <p className="text-sm text-dark-500">
-                            Qty: {item.quantity}
+                            {t('shop.checkout.qty', { count: item.quantity })}
                           </p>
-                          <p className="text-sm font-semibold">
+                          <p className="text-sm font-semibold ltr-nums">
                             {formatCurrency(price * item.quantity)}
                           </p>
                         </div>
@@ -656,8 +682,8 @@ export default function CheckoutPage() {
                         type="button"
                         onClick={handleRemovePromo}
                         className="text-dark-400 hover:text-dark-600"
-                        title="Remove promo code"
-                        aria-label="Remove promo code"
+                        title={t('shop.a11y.removePromo')}
+                        aria-label={t('shop.a11y.removePromo')}
                       >
                         <HiOutlineX size={18} />
                       </button>
@@ -665,7 +691,7 @@ export default function CheckoutPage() {
                   ) : (
                     <div className="flex gap-2">
                       <Input
-                        placeholder="Promo code"
+                        placeholder={t('cart.discountCode')}
                         value={promoCode}
                         onChange={(e) => setPromoCode(e.target.value)}
                         className="flex-1"
@@ -676,7 +702,7 @@ export default function CheckoutPage() {
                         onClick={handleApplyPromo}
                         isLoading={isApplyingPromo}
                       >
-                        Apply
+                        {t('common.apply')}
                       </Button>
                     </div>
                   )}
@@ -687,12 +713,12 @@ export default function CheckoutPage() {
                   <div className="mt-4 pt-4 border-t border-beige-200">
                     <div className="flex items-center gap-2 mb-3">
                       <HiOutlineStar className="text-primary-600" size={18} />
-                      <span className="text-sm font-medium text-dark-900">Use Loyalty Points</span>
+                      <span className="text-sm font-medium text-dark-900">{t('shop.checkout.useLoyaltyPoints')}</span>
                     </div>
                     <div className="p-3 bg-primary-50 rounded-lg space-y-3">
                       <div className="flex justify-between text-sm">
-                        <span className="text-primary-700">Available Points</span>
-                        <span className="font-semibold text-primary-900">{loyaltyPoints.toLocaleString()}</span>
+                        <span className="text-primary-700">{t('shop.checkout.availablePoints')}</span>
+                        <span className="font-semibold text-primary-900 ltr-nums">{loyaltyPoints.toLocaleString()}</span>
                       </div>
                       <div>
                         <input
@@ -703,11 +729,11 @@ export default function CheckoutPage() {
                           value={redeemPoints}
                           onChange={(e) => setRedeemPoints(Number(e.target.value))}
                           className="w-full accent-primary-600"
-                          aria-label="Points to redeem"
+                          aria-label={t('shop.a11y.pointsToRedeem')}
                         />
-                        <div className="flex justify-between text-xs text-primary-600 mt-1">
+                        <div className="flex justify-between text-xs text-primary-600 mt-1 ltr-nums">
                           <span>0</span>
-                          <span>{maxRedeemable.toLocaleString()} pts</span>
+                          <span>{maxRedeemable.toLocaleString()} {t('shop.checkout.pts')}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -722,11 +748,11 @@ export default function CheckoutPage() {
                             setRedeemPoints(Math.max(0, val));
                           }}
                           className="w-24 px-2 py-1 text-sm border border-primary-200 rounded bg-white text-center"
-                          aria-label="Number of points to redeem"
+                          aria-label={t('shop.a11y.pointsNumber')}
                         />
-                        <span className="text-sm text-primary-700">points</span>
-                        <span className="text-sm text-primary-600 ml-auto font-medium">
-                          = {formatCurrency(pointsDiscount)} off
+                        <span className="text-sm text-primary-700">{t('shop.checkout.points')}</span>
+                        <span className="text-sm text-primary-600 ms-auto font-medium">
+                          {t('shop.checkout.pointsOff', { amount: formatCurrency(pointsDiscount) })}
                         </span>
                       </div>
                       {redeemPoints > 0 && (
@@ -735,11 +761,14 @@ export default function CheckoutPage() {
                           onClick={() => setRedeemPoints(0)}
                           className="text-xs text-primary-600 hover:text-primary-700 underline"
                         >
-                          Remove points
+                          {t('shop.checkout.removePoints')}
                         </button>
                       )}
                       <p className="text-xs text-primary-500">
-                        {pointsRedemptionRate} points = {formatCurrency(1)} discount
+                        {t('shop.checkout.pointsRate', {
+                          rate: pointsRedemptionRate,
+                          amount: formatCurrency(1),
+                        })}
                       </p>
                     </div>
                   </div>
@@ -751,7 +780,12 @@ export default function CheckoutPage() {
                     <div className="p-3 bg-beige-50 rounded-lg">
                       <div className="flex items-center gap-2 text-sm text-dark-500">
                         <HiOutlineStar size={16} />
-                        <span>You have <strong>{loyaltyPoints}</strong> points. Minimum {minPointsToRedeem} needed to redeem.</span>
+                        <span>
+                          {t('shop.checkout.pointsMinNotice', {
+                            points: loyaltyPoints,
+                            min: minPointsToRedeem,
+                          })}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -760,40 +794,40 @@ export default function CheckoutPage() {
                 {/* Price Breakdown */}
                 <div className="mt-4 pt-4 border-t border-beige-200 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-dark-500">Subtotal</span>
-                    <span>{formatCurrency(subtotal)}</span>
+                    <span className="text-dark-500">{t('cart.subtotal')}</span>
+                    <span className="ltr-nums">{formatCurrency(subtotal)}</span>
                   </div>
                   {discountAmount > 0 && (
                     <div className="flex justify-between text-sm text-success-600">
-                      <span>Promo Discount</span>
-                      <span>-{formatCurrency(discountAmount)}</span>
+                      <span>{t('shop.checkout.promoDiscount')}</span>
+                      <span className="ltr-nums">-{formatCurrency(discountAmount)}</span>
                     </div>
                   )}
                   {hasReferralDiscount && referralDiscount > 0 && (
                     <div className="flex justify-between text-sm text-success-600">
                       <span className="flex items-center gap-1">
-                        Referral Bonus
+                        {t('shop.checkout.referralBonus')}
                         <span className="text-xs bg-success-100 px-1.5 py-0.5 rounded text-success-700">
-                          First Order
+                          {t('shop.checkout.firstOrder')}
                         </span>
                       </span>
-                      <span>-{formatCurrency(referralDiscount)}</span>
+                      <span className="ltr-nums">-{formatCurrency(referralDiscount)}</span>
                     </div>
                   )}
                   {pointsDiscount > 0 && (
                     <div className="flex justify-between text-sm text-success-600">
                       <span className="flex items-center gap-1">
                         <HiOutlineStar size={14} />
-                        Points Discount ({redeemPoints.toLocaleString()} pts)
+                        {t('shop.checkout.pointsDiscount', { count: redeemPoints.toLocaleString() })}
                       </span>
-                      <span>-{formatCurrency(pointsDiscount)}</span>
+                      <span className="ltr-nums">-{formatCurrency(pointsDiscount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
-                    <span className="text-dark-500">Shipping</span>
-                    <span>
+                    <span className="text-dark-500">{t('cart.shipping')}</span>
+                    <span className="ltr-nums">
                       {shippingFee === 0 ? (
-                        <span className="text-success-600">Free</span>
+                        <span className="text-success-600">{t('common.free')}</span>
                       ) : (
                         formatCurrency(shippingFee)
                       )}
@@ -801,25 +835,50 @@ export default function CheckoutPage() {
                   </div>
                   {shippingFee > 0 && settings.enableFreeShipping && (
                     <p className="text-xs text-dark-400">
-                      Free shipping on orders over {settings.currency} {freeShippingThreshold.toLocaleString()}
+                      {t('cart.freeShippingOver', {
+                        amount: `${settings.currency} ${freeShippingThreshold.toLocaleString()}`,
+                      })}
                     </p>
                   )}
                   {taxAmount > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-dark-500">
-                        {settings.taxLabel || 'VAT'} ({taxRate}%)
+                        {settings.taxLabel || 'VAT'} <span className="ltr-nums">({taxRate}%)</span>
                       </span>
-                      <span>{formatCurrency(taxAmount)}</span>
+                      <span className="ltr-nums">{formatCurrency(taxAmount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between pt-2 border-t border-beige-200">
-                    <span className="font-semibold">Total</span>
-                    <span className="text-lg font-bold">{formatCurrency(finalTotal)}</span>
+                    <span className="font-semibold">{t('cart.total')}</span>
+                    <span className="text-lg font-bold ltr-nums">{formatCurrency(finalTotal)}</span>
                   </div>
                   {taxAmount > 0 && (
                     <p className="text-xs text-dark-400">
-                      Inclusive of {settings.taxLabel || 'VAT'} ({taxRate}%): {formatCurrency(taxAmount)}
+                      {t('cart.inclusiveOfVat', {
+                        label: settings.taxLabel || 'VAT',
+                        rate: taxRate,
+                        amount: formatCurrency(taxAmount),
+                      })}
                     </p>
+                  )}
+
+                  {/* BNPL messaging — informational only, no gateway integrated */}
+                  {finalTotal > 0 && (
+                    <div className="mt-3 rounded-lg border border-beige-200 bg-beige-50 px-3 py-2">
+                      <p className="text-xs text-dark-600 leading-relaxed">
+                        {t('shop.checkout.bnplPrefix')}{' '}
+                        <span className="font-semibold text-dark-900 ltr-nums">
+                          {settings.currency} {bnplInstallment.toFixed(2)}
+                        </span>{' '}
+                        {t('shop.checkout.bnplWith')}{' '}
+                        <span className="font-semibold text-dark-900">tabby</span>
+                        {' / '}
+                        <span className="font-semibold text-dark-900">tamara</span>
+                      </p>
+                      <p className="mt-1 text-[10px] text-dark-400">
+                        {t('shop.checkout.bnplSoon')}
+                      </p>
+                    </div>
                   )}
                 </div>
 
@@ -830,11 +889,11 @@ export default function CheckoutPage() {
                   isLoading={isLoading}
                   className="mt-6"
                 >
-                  Place Order
+                  {t('checkout.placeOrder')}
                 </Button>
 
                 <p className="mt-4 text-xs text-center text-dark-500">
-                  By placing your order, you agree to our Terms of Service
+                  {t('shop.checkout.termsNotice')}
                 </p>
               </Card>
             </div>

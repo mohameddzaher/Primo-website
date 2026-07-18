@@ -154,85 +154,14 @@ router.post(
   })
 );
 
-// Complete referral (called when referee makes first purchase)
-router.post(
-  '/complete',
-  authenticate,
-  requireAuth,
-  asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { orderId, orderAmount } = req.body;
-    const userId = req.userId;
-
-    // Find pending referral for this user
-    const referral = await Referral.findOne({
-      referee: userId,
-      status: 'pending',
-    });
-
-    if (!referral) {
-      res.json({
-        success: true,
-        data: { completed: false, message: 'No pending referral found' },
-      });
-      return;
-    }
-
-    // Minimum order requirement (can be configured in settings)
-    const minOrderAmount = 500;
-    if (orderAmount < minOrderAmount) {
-      res.json({
-        success: true,
-        data: {
-          completed: false,
-          message: `Order must be at least SAR ${minOrderAmount} to complete referral`,
-        },
-      });
-      return;
-    }
-
-    // Update referral status
-    referral.status = 'completed';
-    referral.orderAmount = orderAmount;
-    referral.orderId = orderId;
-    referral.completedAt = new Date();
-    await referral.save();
-
-    // Credit the referrer
-    await User.findByIdAndUpdate(referral.referrer, {
-      $inc: {
-        referralCredits: referral.referrerReward,
-        successfulReferrals: 1,
-      },
-    });
-
-    // Award referral bonus loyalty points
-    try {
-      const settings = await (Settings as any).getSettings();
-      if (settings.enableLoyaltyProgram && settings.referralBonusPoints > 0) {
-        const referrer = await User.findById(referral.referrer);
-        if (referrer && !referrer.pointsFrozen) {
-          referrer.loyaltyPoints += settings.referralBonusPoints;
-          referrer.totalPointsEarned += settings.referralBonusPoints;
-          await referrer.save();
-
-          await PointsTransaction.create({
-            userId: referrer._id,
-            type: 'earned_referral',
-            points: settings.referralBonusPoints,
-            description: `Earned ${settings.referralBonusPoints} bonus points for successful referral`,
-          });
-        }
-      }
-    } catch (loyaltyErr) {
-      console.error('Error awarding referral bonus points:', loyaltyErr);
-    }
-
-    res.json({
-      success: true,
-      data: { completed: true, message: 'Referral completed successfully' },
-    });
-  })
-);
+// NOTE: the former `POST /referrals/complete` endpoint was removed.
+//
+// It trusted a client-supplied `orderAmount`/`orderId` and never loaded the
+// order, so any authenticated user could POST {"orderAmount": 999999} to mint
+// referral credits and loyalty points for their referrer without ever buying
+// anything. It was also entirely redundant: referral completion is handled
+// authoritatively (and atomically, against the real order total) when an order
+// is placed — see the referral block in `orders.routes.ts`.
 
 // Generate new referral code (if user doesn't have one)
 router.post(

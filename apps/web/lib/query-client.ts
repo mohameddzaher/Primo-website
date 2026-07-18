@@ -3,10 +3,15 @@ import { QueryClient } from '@tanstack/react-query';
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 1000, // 1 minute
-      gcTime: 5 * 60 * 1000, // 5 minutes (previously cacheTime)
+      staleTime: 2 * 60 * 1000, // 2 minutes
+      gcTime: 15 * 60 * 1000, // keep data around for back/forward navigation
       retry: 1,
-      refetchOnWindowFocus: true, // re-fetch when user switches back from admin
+      // Refetching everything on every tab focus caused a request storm (the
+      // storefront shell alone issues ~10 queries). Freshness is instead
+      // guaranteed by: (a) the API busting its own response cache on every
+      // write, and (b) admin mutations invalidating their query keys directly.
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
     },
     mutations: {
       retry: 0,
@@ -14,9 +19,12 @@ export const queryClient = new QueryClient({
   },
 });
 
-// Categories are admin-managed — always treat as stale so they refetch
-// on window focus immediately after an admin adds/edits/deletes a category.
-queryClient.setQueryDefaults(['categories'], { staleTime: 0 });
+// Reference data that only changes via the admin panel — hold it longer on the
+// client. Admin mutations invalidate these keys explicitly, and the API clears
+// its own cache on write, so this stays correct without constant refetching.
+queryClient.setQueryDefaults(['categories'], { staleTime: 5 * 60 * 1000 });
+queryClient.setQueryDefaults(['brands'], { staleTime: 5 * 60 * 1000 });
+queryClient.setQueryDefaults(['settings'], { staleTime: 10 * 60 * 1000 });
 
 // Query keys factory
 export const queryKeys = {

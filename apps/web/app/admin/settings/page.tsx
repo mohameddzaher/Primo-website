@@ -55,6 +55,16 @@ const settingsSchema = z.object({
   paypalEnabled: z.boolean(),
   paypalClientId: z.string().optional(),
   paypalSecret: z.string().optional(),
+  // Tax / Invoicing (ZATCA e-invoicing seller identity)
+  sellerName: z.string().optional(),
+  // ZATCA requires a 15-digit VAT registration number, but an empty value must
+  // still be savable so the store can be configured before it is registered.
+  sellerVatNumber: z
+    .string()
+    .regex(/^(\d{15})?$/, 'VAT number must be exactly 15 digits')
+    .optional(),
+  sellerCrNumber: z.string().optional(),
+  sellerAddress: z.string().optional(),
   // Email
   smtpHost: z.string().optional(),
   smtpPort: z.number().optional(),
@@ -124,8 +134,8 @@ const defaultSettings: SettingsForm = {
   siteEmail: 'support@primo.com',
   sitePhone: '',
   siteAddress: '',
-  currency: 'EGP',
-  timezone: 'Africa/Cairo',
+  currency: 'SAR',
+  timezone: 'Asia/Riyadh',
   dateFormat: 'DD/MM/YYYY',
   maintenanceMode: false,
   maintenanceMessage: 'We are currently undergoing maintenance. Please check back later.',
@@ -133,7 +143,7 @@ const defaultSettings: SettingsForm = {
   freeShippingThreshold: 500,
   enableFreeShipping: true,
   estimatedDeliveryDays: 3,
-  taxRate: 14,
+  taxRate: 15,
   enableTax: true,
   taxLabel: 'VAT',
   enableCOD: true,
@@ -145,6 +155,10 @@ const defaultSettings: SettingsForm = {
   paypalEnabled: false,
   paypalClientId: '',
   paypalSecret: '',
+  sellerName: '',
+  sellerVatNumber: '',
+  sellerCrNumber: '',
+  sellerAddress: '',
   smtpHost: '',
   smtpPort: 587,
   smtpUser: '',
@@ -424,7 +438,7 @@ export default function AdminSettingsPage() {
 
                   <div className="p-4 bg-beige-50 rounded-lg">
                     <p className="text-sm text-dark-600">
-                      Orders above <strong>{watch('freeShippingThreshold') || 500} {watch('currency') || 'EGP'}</strong> will qualify for free shipping.
+                      Orders above <strong>{watch('freeShippingThreshold') || 500} {watch('currency') || 'SAR'}</strong> will qualify for free shipping.
                       Estimated delivery: <strong>{watch('estimatedDeliveryDays') || 3} days</strong>
                     </p>
                   </div>
@@ -460,6 +474,45 @@ export default function AdminSettingsPage() {
                       {...register('taxLabel')}
                     />
                   </div>
+                </Card>
+
+                <Card padding="lg" className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-dark-900">Tax / Invoicing</h3>
+                    <p className="text-sm text-dark-500 mt-1">
+                      Your registered seller identity. These details are printed on every tax
+                      invoice and encoded into the ZATCA QR code, so they must match your ZATCA
+                      registration exactly.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Legal Registered Name"
+                      placeholder="PRIMO Trading Est."
+                      error={errors.sellerName?.message}
+                      {...register('sellerName')}
+                    />
+                    <Input
+                      label="VAT Registration Number"
+                      placeholder="300000000000003"
+                      error={errors.sellerVatNumber?.message}
+                      {...register('sellerVatNumber')}
+                    />
+                    <Input
+                      label="Commercial Registration (CR) Number"
+                      placeholder="1010000000"
+                      error={errors.sellerCrNumber?.message}
+                      {...register('sellerCrNumber')}
+                    />
+                  </div>
+
+                  <Textarea
+                    label="Registered Address"
+                    placeholder="Street, District, City, Postal Code, Saudi Arabia"
+                    rows={3}
+                    {...register('sellerAddress')}
+                  />
                 </Card>
 
                 <Card padding="lg" className="space-y-6">
@@ -1106,8 +1159,8 @@ export default function AdminSettingsPage() {
                         />
                       </div>
                       <p className="text-xs text-dark-500">
-                        Customers earn <strong>{watch('pointsPerCurrency') || 1}</strong> point(s) per 1 {watch('currency') || 'EGP'} spent.{' '}
-                        <strong>{watch('pointsRedemptionRate') || 100}</strong> points = 1 {watch('currency') || 'EGP'} discount.
+                        Customers earn <strong>{watch('pointsPerCurrency') || 1}</strong> point(s) per 1 {watch('currency') || 'SAR'} spent.{' '}
+                        <strong>{watch('pointsRedemptionRate') || 100}</strong> points = 1 {watch('currency') || 'SAR'} discount.
                       </p>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { HiArrowRight, HiChevronLeft, HiChevronRight } from 'react-icons/hi';
-import { productsApi, cmsApi } from '@/lib/api';
+import { productsApi } from '@/lib/api';
 import { ProductCard } from '@/components/product/ProductCard';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useI18n } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
   try {
@@ -24,19 +26,16 @@ const defaultSettings = {
 };
 
 export function HomeNewArrivals() {
+  const { t, isRtl } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data: cms } = useQuery({
-    queryKey: ['cms-homepage_new_arrivals'],
-    queryFn: () => cmsApi.getContent('homepage_new_arrivals'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: cms } = useCmsContent('homepage_new_arrivals');
 
   const settings = parseCmsJson(cms, defaultSettings);
 
   const { data: result, isLoading } = useQuery({
     queryKey: ['products-new-arrivals', settings.count],
-    queryFn: () => productsApi.getAll({ sort: '-createdAt', limit: settings.count || 10 }),
+    queryFn: () => productsApi.getAll({ sort: 'newest', limit: settings.count || 10 }),
     staleTime: 2 * 60 * 1000,
     enabled: settings.enabled !== false,
   });
@@ -46,9 +45,12 @@ export function HomeNewArrivals() {
   if (settings.enabled === false) return null;
   if (!isLoading && products.length === 0) return null;
 
-  const scroll = (dir: 'left' | 'right') => {
+  // 'prev'/'next' follow reading order. In an RTL scroller scrollLeft runs
+  // negative, so the delta is inverted to keep the buttons meaning the same.
+  const scroll = (dir: 'prev' | 'next') => {
     if (!scrollRef.current) return;
-    scrollRef.current.scrollBy({ left: dir === 'left' ? -300 : 300, behavior: 'smooth' });
+    const delta = (dir === 'prev' ? -300 : 300) * (isRtl ? -1 : 1);
+    scrollRef.current.scrollBy({ left: delta, behavior: 'smooth' });
   };
 
   return (
@@ -68,25 +70,25 @@ export function HomeNewArrivals() {
             {/* Scroll arrows */}
             <button
               type="button"
-              onClick={() => scroll('left')}
+              onClick={() => scroll('prev')}
               className="hidden sm:flex w-8 h-8 items-center justify-center rounded-full border border-beige-200 text-dark-600 hover:border-dark-300 hover:text-dark-900 transition-colors"
-              aria-label="Scroll left"
+              aria-label={t('common.previous')}
             >
-              <HiChevronLeft size={18} />
+              <HiChevronLeft size={18} className="rtl-flip" />
             </button>
             <button
               type="button"
-              onClick={() => scroll('right')}
+              onClick={() => scroll('next')}
               className="hidden sm:flex w-8 h-8 items-center justify-center rounded-full border border-beige-200 text-dark-600 hover:border-dark-300 hover:text-dark-900 transition-colors"
-              aria-label="Scroll right"
+              aria-label={t('common.next')}
             >
-              <HiChevronRight size={18} />
+              <HiChevronRight size={18} className="rtl-flip" />
             </button>
             <Link
               href="/products?sort=newest"
               className="flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
             >
-              View All <HiArrowRight size={14} />
+              {t('common.viewAll')} <HiArrowRight size={14} className="rtl-flip" />
             </Link>
           </div>
         </div>

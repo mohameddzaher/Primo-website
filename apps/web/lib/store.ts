@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { authApi, setAccessToken } from '@/lib/api';
+import { authApi, userApi, setAccessToken } from '@/lib/api';
 
 // User Store
 interface User {
@@ -80,6 +80,17 @@ interface CartItem {
     stock: number;
   };
   quantity: number;
+  // Selected option (e.g. Colour: Stainless Steel). A product bought in two
+  // different variants must occupy two separate cart lines, so every lookup is
+  // keyed on productId + variantId rather than productId alone.
+  variantId?: string;
+  variantName?: string;
+  variantValue?: string;
+}
+
+/** Identity of a cart line. Two lines match only if BOTH product and variant match. */
+function cartLineKey(productId: string, variantId?: string): string {
+  return `${productId}::${variantId || ''}`;
 }
 
 interface CartState {
@@ -91,8 +102,8 @@ interface CartState {
   maxDiscount: number | null;
   isOpen: boolean;
   addItem: (item: CartItem) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  removeItem: (productId: string) => void;
+  updateQuantity: (productId: string, quantity: number, variantId?: string) => void;
+  removeItem: (productId: string, variantId?: string) => void;
   clearCart: () => void;
   setDiscount: (code: string, amount: number, type?: 'percentage' | 'fixed', value?: number, maxDiscount?: number | null) => void;
   clearDiscount: () => void;
@@ -119,11 +130,14 @@ export const useCartStore = create<CartState>()(
 
       addItem: (item) =>
         set((state) => {
-          const existingItem = state.items.find((i) => i.productId === item.productId);
+          const key = cartLineKey(item.productId, item.variantId);
+          const existingItem = state.items.find(
+            (i) => cartLineKey(i.productId, i.variantId) === key
+          );
           if (existingItem) {
             return {
               items: state.items.map((i) =>
-                i.productId === item.productId
+                cartLineKey(i.productId, i.variantId) === key
                   ? { ...i, quantity: Math.min((i.quantity || 0) + (item.quantity || 1), i.product?.stock || 999) }
                   : i
               ),
@@ -132,19 +146,27 @@ export const useCartStore = create<CartState>()(
           return { items: [...state.items, item] };
         }),
 
-      updateQuantity: (productId, quantity) =>
-        set((state) => ({
-          items: state.items.map((item) =>
-            item.productId === productId
-              ? { ...item, quantity: Math.min(Math.max(1, quantity || 1), item.product?.stock || 999) }
-              : item
-          ),
-        })),
+      updateQuantity: (productId, quantity, variantId) =>
+        set((state) => {
+          const key = cartLineKey(productId, variantId);
+          return {
+            items: state.items.map((item) =>
+              cartLineKey(item.productId, item.variantId) === key
+                ? { ...item, quantity: Math.min(Math.max(1, quantity || 1), item.product?.stock || 999) }
+                : item
+            ),
+          };
+        }),
 
-      removeItem: (productId) =>
-        set((state) => ({
-          items: state.items.filter((item) => item.productId !== productId),
-        })),
+      removeItem: (productId, variantId) =>
+        set((state) => {
+          const key = cartLineKey(productId, variantId);
+          return {
+            items: state.items.filter(
+              (item) => cartLineKey(item.productId, item.variantId) !== key
+            ),
+          };
+        }),
 
       clearCart: () => set({ items: [], discountCode: null, discountAmount: 0, discountType: null, discountValue: 0, maxDiscount: null }),
 
@@ -266,6 +288,31 @@ export const useWishlistStore = create<WishlistState>()(
     }
   )
 );
+
+/**
+ * Reconcile the local (guest) wishlist with the authenticated user's server
+ * wishlist. Call this right after any successful login / register / session
+ * restore. It merges any items the user added while logged out into the server,
+ * then pulls the authoritative server list back into the local store so the
+ * header badge, product-card hearts and the wishlist page all stay in sync.
+ */
+export async function syncWishlistWithServer(): Promise<void> {
+  try {
+    const localIds = useWishlistStore.getState().items;
+    if (localIds.length) {
+      // Push guest items up to the server (server dedupes via $addToSet)
+      await Promise.allSettled(localIds.map((id) => userApi.addToWishlist(id)));
+    }
+    // Pull the authoritative server wishlist back down
+    const serverItems = await userApi.getWishlist();
+    const ids = (serverItems || [])
+      .map((p: any) => (p?._id || p?.id || '').toString())
+      .filter(Boolean);
+    useWishlistStore.getState().setItems(ids);
+  } catch {
+    // Network/auth failure — keep the local state untouched
+  }
+}
 
 // Compare Store
 interface CompareState {

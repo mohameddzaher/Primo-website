@@ -26,15 +26,25 @@ const discountNumber = z.preprocess(
 const productSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
+  shortDescription: z.string().max(500, 'Short description must be at most 500 characters').optional(),
   price: z.number().min(1, 'Price must be greater than 0'),
   compareAtPrice: optionalNumber,
   discount: discountNumber,
   discountEndsAt: z.string().optional(),
   sku: z.string().min(1, 'SKU is required'),
   stockQuantity: z.number().min(0, 'Stock cannot be negative'),
+  lowStockThreshold: z.preprocess(
+    (val) => (val === null || val === undefined || val === '' || (typeof val === 'number' && isNaN(val))) ? undefined : val,
+    z.number().int().min(0).optional()
+  ),
   categoryId: z.string().min(1, 'Category is required'),
+  subcategoryId: z.string().optional(),
   brand: z.string().min(1, 'Brand is required'),
   warranty: z.string().optional(),
+  deliveryNotes: z.string().max(1000).optional(),
+  installationNotes: z.string().max(1000).optional(),
+  metaTitle: z.string().max(60, 'Meta title must be at most 60 characters').optional(),
+  metaDescription: z.string().max(160, 'Meta description must be at most 160 characters').optional(),
   isActive: z.boolean(),
   isFeatured: z.boolean(),
 });
@@ -44,6 +54,26 @@ type ProductForm = z.infer<typeof productSchema>;
 type ProductImage = { id: string; url: string; alt: string; isPrimary: boolean; order: number };
 type ProductFAQ = { id: string; question: string; answer: string; order: number };
 type ProductSpec = { id: string; group: string; name: string; value: string };
+type ProductVariant = {
+  id: string;
+  name: string;
+  value: string;
+  sku: string;
+  priceModifier: number;
+  stockQuantity: number;
+  image: string;
+  isDefault: boolean;
+};
+
+/** Common option names. Free text is allowed too — this is only a shortcut. */
+const VARIANT_NAMES = [
+  'Colour',
+  'Capacity',
+  'Size',
+  'Screen Size',
+  'Power',
+  'Configuration',
+];
 
 const SPEC_GROUPS = [
   'General',
@@ -63,6 +93,9 @@ export default function NewProductPage() {
   const [newImage, setNewImage] = useState('');
   const [faqs, setFaqs] = useState<ProductFAQ[]>([]);
   const [specs, setSpecs] = useState<ProductSpec[]>([]);
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState('');
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -94,13 +127,23 @@ export default function NewProductPage() {
 
   const watchPrice = watch('price');
   const watchDiscount = watch('discount');
+  const watchCategoryId = watch('categoryId');
 
+  // Only parent categories are selectable as the main category
   const categoryOptions = [
     { value: '', label: 'Select Category' },
-    ...(categories?.map((cat: any) => ({
+    ...(categories?.filter((cat: any) => !cat.parentId).map((cat: any) => ({
       value: cat._id,
       label: cat.name,
     })) || []),
+  ];
+
+  // Subcategories belong to the selected parent category
+  const subcategoryOptions = [
+    { value: '', label: 'None' },
+    ...(categories
+      ?.filter((cat: any) => cat.parentId && (cat.parentId?._id || cat.parentId) === watchCategoryId)
+      .map((cat: any) => ({ value: cat._id, label: cat.name })) || []),
   ];
 
   const brandOptions = [
@@ -129,6 +172,18 @@ export default function NewProductPage() {
     setImages(images.filter((_, i) => i !== index));
   };
 
+  const addTag = () => {
+    const t = newTag.trim().toLowerCase();
+    if (t && !tags.includes(t)) {
+      setTags([...tags, t]);
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tag: string) => {
+    setTags(tags.filter((t) => t !== tag));
+  };
+
   const onSubmit = async (data: ProductForm) => {
     if (images.length === 0) {
       toast.error('Please add at least one image');
@@ -144,7 +199,28 @@ export default function NewProductPage() {
       const cleanSpecs = specs
         .filter(s => s.name.trim() && s.value.trim())
         .map(s => ({ name: s.name.trim(), value: s.value.trim(), group: s.group || 'General' }));
-      const cleanData: any = { ...data, images, faqs: cleanFaqs, specs: cleanSpecs };
+      // Only fully-filled variant rows are sent. When variants exist the API
+      // recomputes the product's stock as the sum of theirs.
+      const cleanVariants = variants
+        .filter(v => v.name.trim() && v.value.trim() && v.sku.trim())
+        .map(v => ({
+          id: v.id,
+          name: v.name.trim(),
+          value: v.value.trim(),
+          sku: v.sku.trim().toUpperCase(),
+          priceModifier: Number.isFinite(v.priceModifier) ? v.priceModifier : 0,
+          stockQuantity: Number.isFinite(v.stockQuantity) ? v.stockQuantity : 0,
+          ...(v.image.trim() ? { image: v.image.trim() } : {}),
+          isDefault: v.isDefault,
+        }));
+      const cleanData: any = { ...data, images, faqs: cleanFaqs, specs: cleanSpecs, variants: cleanVariants, tags };
+      // Strip empty optional string fields so we don't send blank values
+      for (const key of ['shortDescription', 'deliveryNotes', 'installationNotes', 'metaTitle', 'metaDescription', 'subcategoryId', 'warranty'] as const) {
+        if (!cleanData[key] || !String(cleanData[key]).trim()) delete cleanData[key];
+      }
+      if (cleanData.lowStockThreshold == null || isNaN(cleanData.lowStockThreshold)) {
+        delete cleanData.lowStockThreshold;
+      }
       if (cleanData.compareAtPrice == null || isNaN(cleanData.compareAtPrice)) {
         delete cleanData.compareAtPrice;
       }
@@ -205,6 +281,13 @@ export default function NewProductPage() {
                   error={errors.description?.message}
                   {...register('description')}
                 />
+                <Textarea
+                  label="Short Description"
+                  placeholder="One-line summary shown on product cards (optional)"
+                  rows={2}
+                  error={errors.shortDescription?.message}
+                  {...register('shortDescription')}
+                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="SKU"
@@ -225,7 +308,53 @@ export default function NewProductPage() {
                   error={errors.warranty?.message}
                   {...register('warranty')}
                 />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Textarea
+                    label="Delivery Notes"
+                    placeholder="e.g., Delivered within 2-5 business days"
+                    rows={2}
+                    error={errors.deliveryNotes?.message}
+                    {...register('deliveryNotes')}
+                  />
+                  <Textarea
+                    label="Installation Notes"
+                    placeholder="e.g., Professional installation available"
+                    rows={2}
+                    error={errors.installationNotes?.message}
+                    {...register('installationNotes')}
+                  />
+                </div>
               </div>
+            </Card>
+
+            {/* Tags */}
+            <Card padding="lg">
+              <h2 className="text-lg font-semibold text-dark-900 mb-1">Tags</h2>
+              <p className="text-xs text-dark-400 mb-4">Used for search and related-product matching.</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add a tag and press Enter"
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+                  fullWidth
+                />
+                <Button type="button" onClick={addTag} title="Add tag" aria-label="Add tag">
+                  <HiOutlinePlus size={18} />
+                </Button>
+              </div>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {tags.map((tag) => (
+                    <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 bg-beige-100 text-dark-700 text-sm rounded-full">
+                      {tag}
+                      <button type="button" onClick={() => removeTag(tag)} className="text-dark-400 hover:text-error-500">
+                        <HiOutlineX size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </Card>
 
             {/* Images */}
@@ -277,16 +406,16 @@ export default function NewProductPage() {
             <Card padding="lg">
               <h2 className="text-lg font-semibold text-dark-900 mb-4">Pricing & Inventory</h2>
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
-                    label="Price (EGP)"
+                    label="Price (SAR)"
                     type="number"
                     placeholder="0"
                     error={errors.price?.message}
                     {...register('price', { valueAsNumber: true })}
                   />
                   <Input
-                    label="Compare at Price (EGP)"
+                    label="Compare at Price (SAR)"
                     type="number"
                     placeholder="0"
                     {...register('compareAtPrice', { valueAsNumber: true })}
@@ -297,6 +426,14 @@ export default function NewProductPage() {
                     placeholder="0"
                     error={errors.stockQuantity?.message}
                     {...register('stockQuantity', { valueAsNumber: true })}
+                  />
+                  <Input
+                    label="Low Stock Threshold"
+                    type="number"
+                    placeholder="5"
+                    hint="Alert when stock reaches this level"
+                    error={errors.lowStockThreshold?.message}
+                    {...register('lowStockThreshold', { valueAsNumber: true })}
                   />
                 </div>
 
@@ -325,14 +462,14 @@ export default function NewProductPage() {
                         <div>
                           <p className="text-sm text-green-800">
                             <span className="line-through text-dark-400 mr-2">
-                              EGP {watchPrice?.toLocaleString()}
+                              SAR {watchPrice?.toLocaleString()}
                             </span>
                             <span className="font-bold text-lg">
-                              EGP {(watchPrice * (1 - (watchDiscount || 0) / 100)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                              SAR {(watchPrice * (1 - (watchDiscount || 0) / 100)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                             </span>
                           </p>
                           <p className="text-xs text-green-600 mt-0.5">
-                            Customer saves EGP {(watchPrice * (watchDiscount || 0) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            Customer saves SAR {(watchPrice * (watchDiscount || 0) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                           </p>
                         </div>
                         <span className="px-2 py-1 bg-red-100 text-red-700 text-sm font-semibold rounded">
@@ -343,6 +480,163 @@ export default function NewProductPage() {
                   )}
                 </div>
               </div>
+            </Card>
+
+            {/* Variants */}
+            <Card padding="lg">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-dark-900">Variants</h2>
+                  <p className="text-xs text-dark-400 mt-0.5">
+                    Optional purchasable options (e.g. Colour, Capacity). Each variant carries its own
+                    SKU and stock, and its price modifier is added to the discounted price. When
+                    variants exist, the product&apos;s stock above is replaced by the sum of theirs.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setVariants([
+                      ...variants,
+                      {
+                        id: `var_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        name: variants[0]?.name || 'Colour',
+                        value: '',
+                        sku: '',
+                        priceModifier: 0,
+                        stockQuantity: 0,
+                        image: '',
+                        isDefault: variants.length === 0,
+                      },
+                    ]);
+                  }}
+                  leftIcon={<HiOutlinePlus size={16} />}
+                >
+                  Add Variant
+                </Button>
+              </div>
+
+              <datalist id="variant-name-options">
+                {VARIANT_NAMES.map((n) => (
+                  <option key={n} value={n} />
+                ))}
+              </datalist>
+
+              {variants.length === 0 ? (
+                <p className="text-sm text-dark-400 text-center py-6">No variants added yet. Click &quot;Add Variant&quot; to get started.</p>
+              ) : (
+                <div className="space-y-3">
+                  {variants.map((variant, index) => (
+                    <div key={variant.id} className="flex items-start gap-2 p-3 bg-beige-50 rounded-lg border border-beige-200">
+                      <div className="flex-1 space-y-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <input
+                            type="text"
+                            list="variant-name-options"
+                            aria-label="Option name"
+                            placeholder="Option name (e.g., Colour)"
+                            value={variant.name}
+                            onChange={(e) => {
+                              const next = [...variants];
+                              next[index] = { ...next[index], name: e.target.value };
+                              setVariants(next);
+                            }}
+                            className="px-3 py-2 border border-beige-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                          />
+                          <input
+                            type="text"
+                            aria-label="Option value"
+                            placeholder="Value (e.g., Stainless Steel)"
+                            value={variant.value}
+                            onChange={(e) => {
+                              const next = [...variants];
+                              next[index] = { ...next[index], value: e.target.value };
+                              setVariants(next);
+                            }}
+                            className="px-3 py-2 border border-beige-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                          <input
+                            type="text"
+                            aria-label="Variant SKU"
+                            placeholder="Variant SKU"
+                            value={variant.sku}
+                            onChange={(e) => {
+                              const next = [...variants];
+                              next[index] = { ...next[index], sku: e.target.value };
+                              setVariants(next);
+                            }}
+                            className="px-3 py-2 border border-beige-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <input
+                            type="number"
+                            aria-label="Price modifier in SAR"
+                            placeholder="Price modifier (SAR, +/-)"
+                            value={Number.isFinite(variant.priceModifier) ? variant.priceModifier : 0}
+                            onChange={(e) => {
+                              const next = [...variants];
+                              next[index] = { ...next[index], priceModifier: parseFloat(e.target.value) || 0 };
+                              setVariants(next);
+                            }}
+                            className="px-3 py-2 border border-beige-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            aria-label="Variant stock quantity"
+                            placeholder="Stock"
+                            value={Number.isFinite(variant.stockQuantity) ? variant.stockQuantity : 0}
+                            onChange={(e) => {
+                              const next = [...variants];
+                              next[index] = { ...next[index], stockQuantity: Math.max(0, parseInt(e.target.value, 10) || 0) };
+                              setVariants(next);
+                            }}
+                            className="px-3 py-2 border border-beige-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                          <input
+                            type="text"
+                            aria-label="Variant image URL"
+                            placeholder="Image URL (optional)"
+                            value={variant.image}
+                            onChange={(e) => {
+                              const next = [...variants];
+                              next[index] = { ...next[index], image: e.target.value };
+                              setVariants(next);
+                            }}
+                            className="px-3 py-2 border border-beige-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-xs text-dark-600">
+                          <input
+                            type="radio"
+                            name="default-variant"
+                            checked={variant.isDefault}
+                            onChange={() => {
+                              setVariants(variants.map((v, i) => ({ ...v, isDefault: i === index })));
+                            }}
+                            className="accent-primary-600"
+                          />
+                          Pre-selected on the product page
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setVariants(variants.filter((_, i) => i !== index))}
+                        className="p-2 text-error-500 hover:text-error-600 rounded mt-0.5"
+                        title="Remove variant"
+                      >
+                        <HiOutlineTrash size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  <p className="text-xs text-dark-500">
+                    Total variant stock: {variants.reduce((sum, v) => sum + (Number.isFinite(v.stockQuantity) ? v.stockQuantity : 0), 0)}
+                  </p>
+                </div>
+              )}
             </Card>
 
             {/* Specifications */}
@@ -556,12 +850,42 @@ export default function NewProductPage() {
             {/* Category */}
             <Card padding="lg">
               <h2 className="text-lg font-semibold text-dark-900 mb-4">Organization</h2>
-              <Select
-                label="Category"
-                options={categoryOptions}
-                error={errors.categoryId?.message}
-                {...register('categoryId')}
-              />
+              <div className="space-y-4">
+                <Select
+                  label="Category"
+                  options={categoryOptions}
+                  error={errors.categoryId?.message}
+                  {...register('categoryId')}
+                />
+                <Select
+                  label="Subcategory"
+                  options={subcategoryOptions}
+                  hint={!watchCategoryId ? 'Select a category first' : undefined}
+                  error={errors.subcategoryId?.message}
+                  {...register('subcategoryId')}
+                />
+              </div>
+            </Card>
+
+            {/* SEO */}
+            <Card padding="lg">
+              <h2 className="text-lg font-semibold text-dark-900 mb-1">SEO</h2>
+              <p className="text-xs text-dark-400 mb-4">Optional. Falls back to the product title/description if left empty.</p>
+              <div className="space-y-4">
+                <Input
+                  label="Meta Title"
+                  placeholder="Up to 60 characters"
+                  error={errors.metaTitle?.message}
+                  {...register('metaTitle')}
+                />
+                <Textarea
+                  label="Meta Description"
+                  placeholder="Up to 160 characters"
+                  rows={3}
+                  error={errors.metaDescription?.message}
+                  {...register('metaDescription')}
+                />
+              </div>
             </Card>
 
             {/* Actions */}

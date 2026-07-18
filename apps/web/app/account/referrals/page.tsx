@@ -69,7 +69,7 @@ export default function ReferralsPage() {
   };
 
   const shareOnWhatsApp = () => {
-    const text = `Hey! Use my referral link to get EGP 100 off your first order at PRIMO: ${referralLink}`;
+    const text = `Hey! Use my referral link to get SAR 100 off your first order at PRIMO: ${referralLink}`;
     window.open(
       `https://wa.me/?text=${encodeURIComponent(text)}`,
       '_blank'
@@ -91,13 +91,13 @@ export default function ReferralsPage() {
     },
     {
       icon: HiOutlineCurrencyDollar,
-      value: `EGP ${referralData?.totalEarnings || 0}`,
+      value: `SAR ${referralData?.totalEarnings || 0}`,
       label: 'Total Earnings',
       color: 'text-primary-600 bg-primary-50',
     },
     {
       icon: HiOutlineGift,
-      value: `EGP ${referralData?.pendingRewards || 0}`,
+      value: `SAR ${referralData?.pendingRewards || 0}`,
       label: 'Pending Rewards',
       color: 'text-yellow-600 bg-yellow-50',
     },
@@ -134,7 +134,7 @@ export default function ReferralsPage() {
             </div>
             <h3 className="font-medium text-dark-900">Friend Signs Up</h3>
             <p className="text-sm text-dark-500 mt-1">
-              They register using your link and get EGP 100 off their first order
+              They register using your link and get SAR 100 off their first order
             </p>
           </div>
           <div className="flex flex-col items-center text-center">
@@ -143,7 +143,7 @@ export default function ReferralsPage() {
             </div>
             <h3 className="font-medium text-dark-900">You Earn Rewards</h3>
             <p className="text-sm text-dark-500 mt-1">
-              Get EGP 100 credit when they complete their first purchase
+              Get SAR 100 credit when they complete their first purchase
             </p>
           </div>
         </div>
@@ -165,8 +165,8 @@ export default function ReferralsPage() {
             </div>
           </div>
           <div className="text-center md:text-right">
-            <p className="text-white/80 text-sm">Give EGP 100, Get EGP 100</p>
-            <p className="text-2xl font-bold mt-1">EGP 100</p>
+            <p className="text-white/80 text-sm">Give SAR 100, Get SAR 100</p>
+            <p className="text-2xl font-bold mt-1">SAR 100</p>
             <p className="text-white/80 text-xs">per successful referral</p>
           </div>
         </div>
@@ -319,7 +319,7 @@ export default function ReferralsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-dark-600">
-                      {referral.status === 'completed' ? 'EGP 100' : '-'}
+                      {referral.status === 'completed' ? 'SAR 100' : '-'}
                     </td>
                     <td className="px-6 py-4 text-dark-600">
                       {new Date(referral.createdAt).toLocaleDateString()}
@@ -337,7 +337,7 @@ export default function ReferralsPage() {
         <h3 className="font-semibold text-dark-900 mb-2">Referral Program Terms</h3>
         <ul className="text-sm text-dark-500 space-y-1">
           <li>• Referral rewards are credited after the referred friend completes their first purchase</li>
-          <li>• Minimum order value of EGP 500 required for the referral to be valid</li>
+          <li>• Minimum order value of SAR 500 required for the referral to be valid</li>
           <li>• Rewards can be used on future purchases and cannot be exchanged for cash</li>
           <li>• PRIMO reserves the right to modify or cancel the referral program at any time</li>
         </ul>

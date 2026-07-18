@@ -9,12 +9,14 @@ import { offersApi, productsApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-client';
 import { ProductCard } from '@/components/product/ProductCard';
 import { Button, ProductGridSkeleton } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 interface CountdownTimerProps {
   endDate: string | Date;
 }
 
 function CountdownTimer({ endDate }: CountdownTimerProps) {
+  const t = useT();
   const [timeLeft, setTimeLeft] = useState({
     days: 0,
     hours: 0,
@@ -43,20 +45,22 @@ function CountdownTimer({ endDate }: CountdownTimerProps) {
   }, [endDate]);
 
   const timeUnits = [
-    { value: timeLeft.days, label: 'Days' },
-    { value: timeLeft.hours, label: 'Hours' },
-    { value: timeLeft.minutes, label: 'Mins' },
-    { value: timeLeft.seconds, label: 'Secs' },
+    { id: 'days', value: timeLeft.days, label: t('home.days') },
+    { id: 'hours', value: timeLeft.hours, label: t('home.hours') },
+    { id: 'minutes', value: timeLeft.minutes, label: t('home.minutes') },
+    { id: 'seconds', value: timeLeft.seconds, label: t('home.seconds') },
   ];
 
+  // Countdown reads left-to-right (days → seconds) in both locales, so the row
+  // itself is not mirrored; only the digits are kept LTR.
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-2" dir="ltr">
       {timeUnits.map((unit) => (
         <div
-          key={unit.label}
+          key={unit.id}
           className="flex flex-col items-center px-2 py-1.5 bg-primary-600 rounded-md"
         >
-          <span className="text-base md:text-lg font-bold text-white">
+          <span className="text-base md:text-lg font-bold text-white ltr-nums">
             {unit.value.toString().padStart(2, '0')}
           </span>
           <span className="text-[10px] text-white/90">{unit.label}</span>
@@ -67,6 +71,8 @@ function CountdownTimer({ endDate }: CountdownTimerProps) {
 }
 
 export function DealsSection() {
+  const t = useT();
+
   // Try to fetch a real flash deal from the backend
   const { data: flashDeal, isLoading: isLoadingDeal } = useQuery({
     queryKey: ['flash-deal'],
@@ -87,12 +93,18 @@ export function DealsSection() {
     : fallbackData?.products || [];
   const isLoading = isLoadingDeal || (!hasFlashDeal && isLoadingFallback);
 
-  // Use real end date from offer, or fallback to 3 days from now
-  const dealEndDate = hasFlashDeal
-    ? new Date(flashDeal.offer.endsAt)
-    : (() => { const d = new Date(); d.setDate(d.getDate() + 3); d.setHours(23, 59, 59, 999); return d; })();
+  // Only ever count down against a genuine offer end date that is still in the
+  // future — never fabricate urgency when there is no real deadline.
+  const rawEndsAt = hasFlashDeal ? flashDeal.offer.endsAt : null;
+  const parsedEndsAt = rawEndsAt ? new Date(rawEndsAt) : null;
+  const dealEndDate =
+    parsedEndsAt && !Number.isNaN(parsedEndsAt.getTime()) && parsedEndsAt.getTime() > Date.now()
+      ? parsedEndsAt
+      : null;
 
-  const dealTitle = hasFlashDeal ? flashDeal.offer.title : 'Flash Deals';
+  // Admin-entered offer titles are shown verbatim; only the fallback heading is
+  // translated.
+  const dealTitle = hasFlashDeal ? flashDeal.offer.title : t('home.flashDeals');
 
   if (!isLoading && products.length === 0) return null;
 
@@ -110,7 +122,7 @@ export function DealsSection() {
             >
               <HiClock size={16} />
               <span className="text-xs font-medium uppercase tracking-wider">
-                Limited Time Offer
+                {dealEndDate ? t('home.limitedTimeOffer') : t('home.bestDiscounts')}
               </span>
             </motion.div>
             <motion.h2
@@ -124,16 +136,18 @@ export function DealsSection() {
             </motion.h2>
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2 }}
-            className="flex items-center gap-3"
-          >
-            <div className="text-xs text-dark-500 font-medium">Ends in:</div>
-            <CountdownTimer endDate={dealEndDate} />
-          </motion.div>
+          {dealEndDate && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.2 }}
+              className="flex items-center gap-3"
+            >
+              <div className="text-xs text-dark-500 font-medium">{t('home.endsIn')}</div>
+              <CountdownTimer endDate={dealEndDate} />
+            </motion.div>
+          )}
         </div>
 
         {/* Products Grid */}
@@ -165,8 +179,8 @@ export function DealsSection() {
           className="mt-6 text-center"
         >
           <Link href="/products?onSale=true">
-            <Button rightIcon={<HiArrowRight size={16} />}>
-              View All Deals
+            <Button rightIcon={<HiArrowRight size={16} className="rtl-flip" />}>
+              {t('home.viewAllDeals')}
             </Button>
           </Link>
         </motion.div>

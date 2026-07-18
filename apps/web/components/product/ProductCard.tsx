@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   HiOutlineHeart,
   HiHeart,
@@ -11,6 +12,7 @@ import {
   HiOutlineEye,
 } from 'react-icons/hi';
 import { cn, formatCurrency, getDiscountedPrice, getStockStatus } from '@/lib/utils';
+import { useSettings } from '@/lib/settings-context';
 import { useCartStore, useWishlistStore, useCompareStore, useAuthStore } from '@/lib/store';
 import { cartApi, userApi } from '@/lib/api';
 import {
@@ -19,7 +21,11 @@ import {
   NewBadge,
   Rating,
 } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import toast from 'react-hot-toast';
+
+/** Stock at or below this count shows the "Only N left" urgency line. */
+const LOW_STOCK_THRESHOLD = 5;
 
 export interface ProductCardProps {
   product: {
@@ -38,6 +44,8 @@ export interface ProductCardProps {
     isNew?: boolean;
     isFeatured?: boolean;
     soldCount?: number;
+    /** Optional purchasable options (colour, capacity, …). */
+    variants?: { id: string; name: string; value: string; stockQuantity: number }[];
   };
   variant?: 'default' | 'compact' | 'horizontal';
   showQuickActions?: boolean;
@@ -52,10 +60,13 @@ export function ProductCard({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
 
+  const queryClient = useQueryClient();
   const { addItem, openCart } = useCartStore();
   const { isInWishlist, toggleItem: toggleWishlist } = useWishlistStore();
   const { addItem: addToCompare, isInCompare } = useCompareStore();
   const { isAuthenticated } = useAuthStore();
+  const { settings } = useSettings();
+  const t = useT();
 
   const isWishlisted = isInWishlist(product._id);
   const inCompare = isInCompare(product._id);
@@ -69,15 +80,37 @@ export function ProductCard({
 
   const stockStatus = getStockStatus(productStock);
 
+  // Delivery promise — threshold and flat fee come from store settings
+  const qualifiesForFreeShipping =
+    settings.enableFreeShipping && finalPrice >= settings.freeShippingThreshold;
+  const deliveryPromise = qualifiesForFreeShipping
+    ? t('product.freeDelivery')
+    : t('product.deliveryFrom', {
+        amount: formatCurrency(settings.shippingFee, settings.currency),
+      });
+
+  // Low-stock urgency (genuine — driven by real stock)
+  const isLowStock = productStock > 0 && productStock <= LOW_STOCK_THRESHOLD;
+
+  // Products with options can't be one-click added from a card — the customer
+  // has to pick a variant on the detail page first.
+  const variantCount = product.variants?.length ?? 0;
+  const hasVariants = variantCount > 0;
+
   // Safe link: use slug if available, otherwise fall back to ID
   const productHref = `/products/${product.slug || product._id}`;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
+    // The server rejects a variant product added without a selected option, so
+    // let the click fall through to the wrapping Link — the customer picks an
+    // option on the detail page instead of getting an error toast.
+    if (hasVariants) return;
+
     e.preventDefault();
     e.stopPropagation();
 
     if (productStock === 0) {
-      toast.error('This product is out of stock');
+      toast.error(t('shop.toast.outOfStock'));
       return;
     }
 
@@ -100,10 +133,10 @@ export function ProductCard({
         quantity: 1,
       });
 
-      toast.success('Added to cart');
+      toast.success(t('shop.toast.addedToCart'));
       openCart();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to add to cart');
+      toast.error(error.response?.data?.message || t('shop.toast.addToCartFailed'));
     }
   };
 
@@ -125,12 +158,16 @@ export function ProductCard({
       } catch (error) {
         // Revert local state on error
         toggleWishlist(product._id);
-        toast.error('Failed to update wishlist');
+        toast.error(t('shop.toast.wishlistFailed'));
         return;
       }
+      // Keep the wishlist page (server-backed query) fresh
+      queryClient.invalidateQueries({ queryKey: ['wishlist'] });
     }
 
-    toast.success(isWishlisted ? 'Removed from wishlist' : 'Added to wishlist');
+    toast.success(
+      isWishlisted ? t('shop.toast.removedFromWishlist') : t('shop.toast.addedToWishlist')
+    );
   };
 
   const handleAddToCompare = (e: React.MouseEvent) => {
@@ -138,9 +175,11 @@ export function ProductCard({
     e.stopPropagation();
     const added = addToCompare(product._id);
     if (added) {
-      toast.success(inCompare ? 'Already in compare' : 'Added to compare');
+      toast.success(
+        inCompare ? t('shop.toast.alreadyInCompare') : t('shop.toast.addedToCompare')
+      );
     } else {
-      toast.error('Compare list is full (max 4 items)');
+      toast.error(t('shop.toast.compareFull'));
     }
   };
 
@@ -158,7 +197,7 @@ export function ProductCard({
           {/* Image container - smaller aspect ratio */}
           <div className="relative aspect-square overflow-hidden bg-beige-100">
             {/* Badges */}
-            <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+            <div className="absolute top-2 start-2 z-10 flex flex-col gap-1">
               {product.discount && product.discount > 0 && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-error-500 text-white">
                   -{product.discount}%
@@ -166,7 +205,7 @@ export function ProductCard({
               )}
               {product.isNew && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-500 text-white">
-                  NEW
+                  {t('shop.product.newBadge')}
                 </span>
               )}
             </div>
@@ -175,8 +214,9 @@ export function ProductCard({
             <button
               type="button"
               onClick={handleToggleWishlist}
+              aria-label={isWishlisted ? t('product.removeFromWishlist') : t('product.addToWishlist')}
               className={cn(
-                'absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-soft transition-all',
+                'absolute top-2 end-2 z-10 p-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-soft transition-all',
                 isWishlisted
                   ? 'text-error-500'
                   : 'text-dark-400 hover:text-error-500'
@@ -212,7 +252,7 @@ export function ProductCard({
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 10 }}
-                className="absolute bottom-2 left-2 right-2 z-10"
+                className="absolute bottom-2 start-2 end-2 z-10"
               >
                 <button
                   type="button"
@@ -221,7 +261,7 @@ export function ProductCard({
                   className="w-full flex items-center justify-center gap-1 py-1.5 bg-dark-900 text-white text-xs font-medium rounded hover:bg-dark-800 disabled:bg-dark-400 disabled:cursor-not-allowed transition-colors"
                 >
                   <HiOutlineShoppingBag size={12} />
-                  {productStock === 0 ? 'Out of Stock' : 'Add'}
+                  {productStock === 0 ? t('product.outOfStock') : t('shop.product.add')}
                 </button>
               </motion.div>
             )}
@@ -254,15 +294,39 @@ export function ProductCard({
 
             {/* Price - pushed to bottom */}
             <div className="mt-auto pt-1.5 flex items-center gap-1 flex-wrap">
-              <span className="text-xs sm:text-sm font-bold text-dark-900">
+              <span className="text-xs sm:text-sm font-bold text-dark-900 ltr-nums">
                 {formatCurrency(finalPrice)}
               </span>
               {product.discount && product.discount > 0 && (
-                <span className="text-[10px] text-dark-400 line-through">
+                <span className="text-[10px] text-dark-400 line-through ltr-nums">
                   {formatCurrency(product.price)}
                 </span>
               )}
             </div>
+
+            {/* Options hint */}
+            {hasVariants && (
+              <p className="mt-0.5 text-[9px] leading-tight text-dark-500">
+                {t('shop.product.optionsAvailable', { count: variantCount })}
+              </p>
+            )}
+
+            {/* Delivery promise */}
+            <p
+              className={cn(
+                'mt-0.5 text-[9px] leading-tight',
+                qualifiesForFreeShipping ? 'text-success-600' : 'text-dark-500'
+              )}
+            >
+              {deliveryPromise}
+            </p>
+
+            {/* Low-stock urgency */}
+            {isLowStock && (
+              <p className="text-[9px] leading-tight text-orange-600 font-medium">
+                {t('product.lowStock', { count: productStock })}
+              </p>
+            )}
           </div>
         </motion.div>
       </Link>
@@ -306,15 +370,20 @@ export function ProductCard({
               {product.title}
             </h3>
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-base font-bold text-dark-900">
+              <span className="text-base font-bold text-dark-900 ltr-nums">
                 {formatCurrency(finalPrice)}
               </span>
               {product.discount && (
-                <span className="text-sm text-dark-400 line-through">
+                <span className="text-sm text-dark-400 line-through ltr-nums">
                   {formatCurrency(product.price)}
                 </span>
               )}
             </div>
+            {hasVariants && (
+              <p className="mt-1 text-xs text-dark-500">
+                {t('shop.product.optionsAvailable', { count: variantCount })}
+              </p>
+            )}
           </div>
         </motion.div>
       </Link>
@@ -333,7 +402,7 @@ export function ProductCard({
         {/* Image container */}
         <div className="relative product-card-image">
           {/* Badges */}
-          <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
+          <div className="absolute top-3 start-3 z-10 flex flex-col gap-2">
             {product.discount && product.discount > 0 && (
               <DiscountBadge percentage={product.discount} />
             )}
@@ -343,8 +412,9 @@ export function ProductCard({
           {/* Wishlist button */}
           <button
             onClick={handleToggleWishlist}
+            aria-label={isWishlisted ? t('product.removeFromWishlist') : t('product.addToWishlist')}
             className={cn(
-              'absolute top-3 right-3 z-10 p-2 rounded-full bg-white/90 backdrop-blur-sm shadow-soft transition-all',
+              'absolute top-3 end-3 z-10 p-2 rounded-full bg-white/90 backdrop-blur-sm shadow-soft transition-all',
               isWishlisted
                 ? 'text-error-500'
                 : 'text-dark-400 hover:text-error-500'
@@ -380,7 +450,7 @@ export function ProductCard({
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 10 }}
-              className="absolute bottom-3 left-3 right-3 z-10 flex gap-2"
+              className="absolute bottom-3 start-3 end-3 z-10 flex gap-2"
             >
               <button
                 onClick={handleAddToCart}
@@ -388,7 +458,7 @@ export function ProductCard({
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-dark-900 text-white text-sm font-medium rounded-lg hover:bg-dark-800 disabled:bg-dark-400 disabled:cursor-not-allowed transition-colors"
               >
                 <HiOutlineShoppingBag size={16} />
-                {productStock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                {productStock === 0 ? t('product.outOfStock') : t('common.addToCart')}
               </button>
               <button
                 onClick={handleAddToCompare}
@@ -398,7 +468,8 @@ export function ProductCard({
                     ? 'bg-primary-600 text-white'
                     : 'bg-white text-dark-700 hover:bg-beige-100'
                 )}
-                title="Compare"
+                title={t('product.compare')}
+                aria-label={t('product.compare')}
               >
                 <HiOutlineEye size={16} />
               </button>
@@ -435,24 +506,41 @@ export function ProductCard({
 
           {/* Price - pushed to bottom */}
           <div className="mt-auto pt-2 flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm sm:text-base font-bold text-dark-900">
+            <span className="text-sm sm:text-base font-bold text-dark-900 ltr-nums">
               {formatCurrency(finalPrice)}
             </span>
             {product.discount && product.discount > 0 && (
-              <span className="text-xs text-dark-400 line-through">
+              <span className="text-xs text-dark-400 line-through ltr-nums">
                 {formatCurrency(product.price)}
               </span>
             )}
           </div>
 
+          {/* Options hint */}
+          {hasVariants && (
+            <p className="mt-1 text-[10px] text-dark-500">
+              {t('shop.product.optionsAvailable', { count: variantCount })}
+            </p>
+          )}
+
+          {/* Delivery promise */}
+          <p
+            className={cn(
+              'mt-1 text-[10px]',
+              qualifiesForFreeShipping ? 'text-success-600 font-medium' : 'text-dark-500'
+            )}
+          >
+            {deliveryPromise}
+          </p>
+
           {/* Stock status */}
-          {productStock <= 5 && productStock > 0 && (
-            <p className="mt-1.5 text-[10px] text-orange-600">
-              Only {productStock} left
+          {isLowStock && (
+            <p className="mt-0.5 text-[10px] text-orange-600 font-medium">
+              {t('product.lowStock', { count: productStock })}
             </p>
           )}
           {productStock === 0 && (
-            <p className="mt-1.5 text-[10px] text-error-600">Out of stock</p>
+            <p className="mt-0.5 text-[10px] text-error-600">{t('product.outOfStock')}</p>
           )}
         </div>
       </motion.div>

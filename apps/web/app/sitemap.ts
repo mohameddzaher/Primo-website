@@ -5,7 +5,7 @@ import type { MetadataRoute } from 'next';
 // if the API is unreachable so the sitemap never 500s.
 
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1';
 
 // Revalidate the sitemap hourly so new products/categories show up automatically.
 export const revalidate = 3600;

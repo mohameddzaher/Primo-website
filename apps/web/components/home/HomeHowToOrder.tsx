@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { cmsApi } from '@/lib/api';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
   try {
@@ -36,11 +36,8 @@ const defaultSettings = {
 };
 
 export function HomeHowToOrder() {
-  const { data: cms } = useQuery({
-    queryKey: ['cms-homepage_how_to_order'],
-    queryFn: () => cmsApi.getContent('homepage_how_to_order'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const t = useT();
+  const { data: cms } = useCmsContent('homepage_how_to_order');
 
   const settings = parseCmsJson(cms, defaultSettings);
 
@@ -58,7 +55,7 @@ export function HomeHowToOrder() {
         {/* Header */}
         <div className="text-center mb-12">
           <span className="inline-block px-3 py-1 bg-primary-50 text-primary-700 text-xs font-semibold rounded-full uppercase tracking-wider mb-3">
-            Simple Process
+            {t('home.simpleProcess')}
           </span>
           <h2 className="text-2xl sm:text-3xl font-display font-bold text-dark-900">
             {settings.title || defaultSettings.title}
@@ -92,7 +89,7 @@ export function HomeHowToOrder() {
                     {step.icon}
                   </div>
                   {/* Step number badge */}
-                  <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center shadow">
+                  <span className="absolute -top-2 -end-2 w-6 h-6 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center shadow">
                     {i + 1}
                   </span>
                 </div>
@@ -116,7 +113,7 @@ export function HomeHowToOrder() {
               className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl transition-colors shadow-sm hover:shadow-md"
             >
               {settings.ctaText}
-              <span>→</span>
+              <span className="rtl-flip">→</span>
             </Link>
           </div>
         )}

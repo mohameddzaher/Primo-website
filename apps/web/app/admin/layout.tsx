@@ -10,6 +10,7 @@ import {
   HiOutlineCollection,
   HiOutlineTag,
   HiOutlineClipboardList,
+  HiOutlineRefresh,
   HiOutlineUsers,
   HiOutlineStar,
   HiOutlineSpeakerphone,
@@ -37,6 +38,7 @@ import NotificationBell from '@/components/admin/NotificationBell';
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: HiOutlineHome },
   { name: 'Orders', href: '/admin/orders', icon: HiOutlineClipboardList },
+  { name: 'Returns', href: '/admin/returns', icon: HiOutlineRefresh },
   { name: 'Products', href: '/admin/products', icon: HiOutlineShoppingBag },
   { name: 'Categories', href: '/admin/categories', icon: HiOutlineCollection },
   { name: 'Brands', href: '/admin/brands', icon: HiOutlineLibrary },

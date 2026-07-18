@@ -17,6 +17,7 @@ import { Newsletter } from '../models/Newsletter';
 import { ContactMessage } from '../models/Contact';
 import { authenticate, requireAdmin, requireSuperAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 import {
   forwardContactMessage,
@@ -25,6 +26,9 @@ import {
 } from '../services/email.service';
 
 const router = Router();
+
+// CMS edits from the admin panel clear the cached storefront content
+router.use(invalidateOnWrite('cms'));
 
 // ========== DEFAULT CONTENT ==========
 
@@ -671,6 +675,7 @@ async function getOrCreateContent(key: string): Promise<any> {
 // Get CMS content by key (public)
 router.get(
   '/content/:key',
+  cacheResponse('cms', 300),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { key } = req.params;
 
@@ -686,6 +691,7 @@ router.get(
 // Get multiple CMS contents (public)
 router.get(
   '/content',
+  cacheResponse('cms', 300),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { keys } = req.query;
 

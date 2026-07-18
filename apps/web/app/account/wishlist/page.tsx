@@ -10,12 +10,13 @@ import {
 } from 'react-icons/hi';
 import { Button, Card } from '@/components/ui';
 import { userApi, cartApi } from '@/lib/api';
-import { useCartStore } from '@/lib/store';
+import { useCartStore, useWishlistStore } from '@/lib/store';
 import toast from 'react-hot-toast';
 
 export default function WishlistPage() {
   const queryClient = useQueryClient();
   const { addItem } = useCartStore();
+  const { removeItem: removeFromWishlistStore } = useWishlistStore();
 
   const { data: wishlist, isLoading } = useQuery({
     queryKey: ['wishlist'],
@@ -24,7 +25,9 @@ export default function WishlistPage() {
 
   const removeMutation = useMutation({
     mutationFn: (productId: string) => userApi.removeFromWishlist(productId),
-    onSuccess: () => {
+    onSuccess: (_data, productId) => {
+      // Keep the local store (header badge + product-card hearts) in sync
+      removeFromWishlistStore(productId);
       queryClient.invalidateQueries({ queryKey: ['wishlist'] });
       toast.success('Removed from wishlist');
     },
@@ -146,15 +149,15 @@ export default function WishlistPage() {
                       {product.salePrice ? (
                         <>
                           <span className="font-semibold text-primary-600">
-                            EGP {product.salePrice.toLocaleString()}
+                            SAR {product.salePrice.toLocaleString()}
                           </span>
                           <span className="text-sm text-dark-400 line-through">
-                            EGP {product.price.toLocaleString()}
+                            SAR {product.price.toLocaleString()}
                           </span>
                         </>
                       ) : (
                         <span className="font-semibold text-dark-900">
-                          EGP {product.price.toLocaleString()}
+                          SAR {product.price.toLocaleString()}
                         </span>
                       )}
                     </div>

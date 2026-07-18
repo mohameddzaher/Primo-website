@@ -6,12 +6,12 @@ import { cmsApi } from '@/lib/api';
 
 const fallbackContent = `
 <h2>About PRIMO</h2>
-<p>PRIMO is a leading e-commerce platform specializing in premium home appliances in Egypt. Founded in 2020, we partner with over 100 trusted brands to deliver quality kitchen appliances, coffee machines, small appliances, and home essentials to customers across the country.</p>
+<p>PRIMO is a leading e-commerce platform specializing in premium home appliances in Saudi Arabia. Founded in 2020, we partner with over 100 trusted brands to deliver quality kitchen appliances, coffee machines, small appliances, and home essentials to customers across the country.</p>
 
 <h2>Company Facts</h2>
 <ul>
 <li><strong>Founded:</strong> 2020</li>
-<li><strong>Headquarters:</strong> Cairo, Egypt</li>
+<li><strong>Headquarters:</strong> Riyadh, Saudi Arabia</li>
 <li><strong>Team Size:</strong> 50+ employees</li>
 <li><strong>Products:</strong> 10,000+ SKUs</li>
 <li><strong>Brands:</strong> 100+ trusted partners</li>
@@ -19,7 +19,7 @@ const fallbackContent = `
 </ul>
 
 <h2>Our Mission</h2>
-<p>To make premium home appliances accessible and affordable for every household in Egypt, providing exceptional customer service and a seamless shopping experience.</p>
+<p>To make premium home appliances accessible and affordable for every household in Saudi Arabia, providing exceptional customer service and a seamless shopping experience.</p>
 
 <h2>Press Releases</h2>
 <p>For the latest news and announcements from PRIMO, follow us on our social media channels or subscribe to our newsletter.</p>

@@ -6,7 +6,7 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import { addToCartSchema, updateCartItemSchema } from '@primo/shared';
 import { Cart } from '../models/Cart';
-import { Product } from '../models/Product';
+import { Product, resolveLinePricing } from '../models/Product';
 import { Settings } from '../models/Settings';
 import { Referral } from '../models/Referral';
 import { Order } from '../models/Order';
@@ -18,6 +18,12 @@ import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/erro
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
+
+// A cart LINE is identified by product + selected variant, so the same product
+// in two colours occupies two independent lines. Items saved before variants
+// existed have no variantId and collapse to the plain productId key.
+const lineKey = (productId: unknown, variantId?: string | null) =>
+  `${String(productId)}::${variantId || ''}`;
 
 // Get session ID from cookie or generate new one
 const getSessionId = (req: AuthRequest, res: Response): string => {
@@ -79,29 +85,38 @@ router.get(
       _id: { $in: productIds },
       isActive: true,
     })
-      .select('title slug price compareAtPrice discount stockQuantity images')
+      .select('title slug price compareAtPrice discount discountEndsAt stockQuantity variants images')
       .lean();
 
-    // Build cart with product details
+    // Build cart with product details. Price and stock are resolved server-side
+    // per line through `resolveLinePricing`, so a selected variant's own stock
+    // and price modifier — never the product aggregate — drive the totals.
     const items = cart.items
       .map((item) => {
         const product = products.find((p) => p._id.toString() === item.productId.toString());
         if (!product) return null;
 
-        const finalPrice = product.discount
-          ? product.price * (1 - product.discount / 100)
-          : product.price;
+        const { variant, variantMissing, unitPrice, availableStock } = resolveLinePricing(
+          product,
+          item.variantId
+        );
+        // The admin deleted this variant while it sat in the cart — drop the
+        // line rather than silently charging the base price for it.
+        if (variantMissing) return null;
 
         return {
           productId: product._id,
+          variantId: variant?.id,
+          variantName: variant?.name,
+          variantValue: variant?.value,
           title: product.title,
           slug: product.slug,
           price: product.price,
-          finalPrice,
+          finalPrice: unitPrice,
           discount: product.discount,
-          quantity: Math.min(item.quantity, product.stockQuantity),
-          stockQuantity: product.stockQuantity,
-          image: product.images?.[0]?.url,
+          quantity: Math.min(item.quantity, availableStock),
+          stockQuantity: availableStock,
+          image: variant?.image || product.images?.[0]?.url,
           addedAt: item.addedAt,
         };
       })
@@ -218,7 +233,7 @@ router.post(
   optionalAuth,
   validate(addToCartSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { productId, quantity } = req.body;
+    const { productId, variantId, quantity } = req.body;
 
     // Verify product exists and has stock
     const product = await Product.findOne({
@@ -230,26 +245,38 @@ router.post(
       throw new NotFoundError('Product');
     }
 
-    if (product.stockQuantity < quantity) {
-      throw new BadRequestError(`Only ${product.stockQuantity} items available`);
+    // A product WITH options must be added with one of them selected, otherwise
+    // we'd have no idea which variant's stock to reserve at checkout.
+    if (product.variants.length > 0 && !variantId) {
+      throw new BadRequestError('Please choose an option before adding this product to the cart');
+    }
+
+    const { variantMissing, availableStock } = resolveLinePricing(product, variantId);
+    if (variantMissing) {
+      throw new BadRequestError('The selected option is no longer available');
+    }
+
+    if (availableStock < quantity) {
+      throw new BadRequestError(`Only ${availableStock} items available`);
     }
 
     const cart = await getOrCreateCart(req, res);
 
-    // Check if item already in cart
+    // Check if this exact product + variant line is already in the cart
     const existingItem = cart.items.find(
-      (item) => item.productId.toString() === productId
+      (item) => lineKey(item.productId, item.variantId) === lineKey(productId, variantId)
     );
 
     if (existingItem) {
       const newQuantity = existingItem.quantity + quantity;
-      if (newQuantity > product.stockQuantity) {
-        throw new BadRequestError(`Cannot add more than ${product.stockQuantity} items`);
+      if (newQuantity > availableStock) {
+        throw new BadRequestError(`Cannot add more than ${availableStock} items`);
       }
       existingItem.quantity = newQuantity;
     } else {
       cart.items.push({
         productId: new mongoose.Types.ObjectId(productId),
+        ...(variantId ? { variantId } : {}),
         quantity,
         addedAt: new Date(),
       });
@@ -274,13 +301,17 @@ router.patch(
   validate(updateCartItemSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { productId } = req.params;
-    const { quantity } = req.body;
+    const { quantity, variantId } = req.body;
 
     const cart = await getOrCreateCart(req, res);
 
-    const itemIndex = cart.items.findIndex(
-      (item) => item.productId.toString() === productId
-    );
+    // With a variantId, target that exact line; without one, fall back to the
+    // first line for the product so pre-variant clients keep working.
+    const itemIndex = variantId
+      ? cart.items.findIndex(
+          (item) => lineKey(item.productId, item.variantId) === lineKey(productId, variantId)
+        )
+      : cart.items.findIndex((item) => item.productId.toString() === productId);
 
     if (itemIndex === -1) {
       throw new NotFoundError('Cart item');
@@ -290,9 +321,16 @@ router.patch(
       // Remove item
       cart.items.splice(itemIndex, 1);
     } else {
-      // Verify stock
+      // Verify stock — against the variant's own stock when one is selected
       const product = await Product.findById(productId);
-      if (!product || product.stockQuantity < quantity) {
+      if (!product) {
+        throw new BadRequestError('Insufficient stock');
+      }
+      const { variantMissing, availableStock } = resolveLinePricing(
+        product,
+        cart.items[itemIndex].variantId
+      );
+      if (variantMissing || availableStock < quantity) {
         throw new BadRequestError('Insufficient stock');
       }
       cart.items[itemIndex].quantity = quantity;
@@ -313,11 +351,16 @@ router.delete(
   optionalAuth,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { productId } = req.params;
+    const variantId = req.query.variantId ? String(req.query.variantId) : undefined;
 
     const cart = await getOrCreateCart(req, res);
 
-    cart.items = cart.items.filter(
-      (item) => item.productId.toString() !== productId
+    // `?variantId=` removes just that option's line; without it every line for
+    // the product is removed (the pre-variant behaviour).
+    cart.items = cart.items.filter((item) =>
+      variantId
+        ? lineKey(item.productId, item.variantId) !== lineKey(productId, variantId)
+        : item.productId.toString() !== productId
     );
 
     await cart.save();
@@ -344,13 +387,18 @@ router.post(
 
     // Validate all products and build new items array. Batch-fetch every product
     // in ONE query (avoids an N+1 lookup per cart line under load).
-    const validItems: { productId: mongoose.Types.ObjectId; quantity: number; addedAt: Date }[] = [];
+    const validItems: {
+      productId: mongoose.Types.ObjectId;
+      variantId?: string;
+      quantity: number;
+      addedAt: Date;
+    }[] = [];
 
     const requestedIds = syncItems
       .filter((it: any) => it.productId && mongoose.Types.ObjectId.isValid(it.productId))
       .map((it: any) => it.productId);
     const products = await Product.find({ _id: { $in: requestedIds }, isActive: true })
-      .select('_id stockQuantity')
+      .select('_id price discount discountEndsAt stockQuantity variants')
       .lean();
     const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
 
@@ -361,10 +409,18 @@ router.post(
       const product = productMap.get(item.productId.toString());
       if (!product) continue;
 
-      const clampedQty = Math.min(qty, product.stockQuantity);
+      const variantId = item.variantId ? String(item.variantId) : undefined;
+      const { variantMissing, availableStock } = resolveLinePricing(product, variantId);
+      // Skip stale lines: a deleted variant, or a variant-only product synced
+      // from an old client that never picked an option.
+      if (variantMissing) continue;
+      if (product.variants?.length > 0 && !variantId) continue;
+
+      const clampedQty = Math.min(qty, availableStock);
       if (clampedQty > 0) {
         validItems.push({
           productId: new mongoose.Types.ObjectId(item.productId),
+          ...(variantId ? { variantId } : {}),
           quantity: clampedQty,
           addedAt: new Date(),
         });
@@ -447,10 +503,9 @@ router.post(
     const subtotal = cart.items.reduce((sum, item) => {
       const product = products.find((p) => p._id.toString() === item.productId.toString());
       if (!product) return sum;
-      const price = product.discount
-        ? product.price * (1 - product.discount / 100)
-        : product.price;
-      return sum + price * item.quantity;
+      const { variantMissing, unitPrice } = resolveLinePricing(product, item.variantId);
+      if (variantMissing) return sum;
+      return sum + unitPrice * item.quantity;
     }, 0);
 
     // Check minimum order amount
@@ -537,7 +592,9 @@ router.post(
     // Merge items
     for (const sessionItem of sessionCart.items) {
       const existingItem = userCart.items.find(
-        (item) => item.productId.toString() === sessionItem.productId.toString()
+        (item) =>
+          lineKey(item.productId, item.variantId) ===
+          lineKey(sessionItem.productId, sessionItem.variantId)
       );
 
       if (existingItem) {

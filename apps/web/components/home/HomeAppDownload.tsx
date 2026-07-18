@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useQuery } from '@tanstack/react-query';
-import { cmsApi } from '@/lib/api';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
   try {
@@ -49,11 +49,8 @@ function GooglePlayIcon() {
 }
 
 export function HomeAppDownload() {
-  const { data: cms } = useQuery({
-    queryKey: ['cms-homepage_app_download'],
-    queryFn: () => cmsApi.getContent('homepage_app_download'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const t = useT();
+  const { data: cms } = useCmsContent('homepage_app_download');
 
   const settings = parseCmsJson(cms, defaultSettings);
 
@@ -71,7 +68,7 @@ export function HomeAppDownload() {
       <div className="container-custom py-16 sm:py-20 relative z-10">
         <div className="flex flex-col lg:flex-row items-center gap-10 lg:gap-16">
           {/* Left: Text content */}
-          <div className="flex-1 text-center lg:text-left">
+          <div className="flex-1 text-center lg:text-start">
             {settings.badge && (
               <span className="inline-block px-3 py-1 bg-primary-600/20 text-primary-300 text-xs font-semibold rounded-full uppercase tracking-wider mb-4">
                 {settings.badge}
@@ -96,8 +93,8 @@ export function HomeAppDownload() {
                   className="group flex items-center gap-3 px-5 py-3 bg-white text-dark-900 rounded-xl font-medium text-sm hover:bg-beige-50 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
                 >
                   <AppleIcon />
-                  <div className="text-left">
-                    <div className="text-[10px] text-dark-500 leading-none">Download on the</div>
+                  <div className="text-start">
+                    <div className="text-[10px] text-dark-500 leading-none">{t('home.downloadOnThe')}</div>
                     <div className="text-sm font-bold leading-tight">App Store</div>
                   </div>
                 </Link>
@@ -111,8 +108,8 @@ export function HomeAppDownload() {
                   className="group flex items-center gap-3 px-5 py-3 bg-white text-dark-900 rounded-xl font-medium text-sm hover:bg-beige-50 transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
                 >
                   <GooglePlayIcon />
-                  <div className="text-left">
-                    <div className="text-[10px] text-dark-500 leading-none">Get it on</div>
+                  <div className="text-start">
+                    <div className="text-[10px] text-dark-500 leading-none">{t('home.getItOn')}</div>
                     <div className="text-sm font-bold leading-tight">Google Play</div>
                   </div>
                 </Link>
@@ -132,7 +129,7 @@ export function HomeAppDownload() {
                 <div className="absolute inset-0 overflow-hidden rounded-[2.25rem]">
                   <Image
                     src="/images/mobApp.png"
-                    alt="PRIMO Mobile App"
+                    alt={t('home.appMockupAlt')}
                     fill
                     className="object-cover"
                     sizes="160px"

@@ -9,13 +9,18 @@ import { Banner } from '../models/Banner';
 import { AuditLog } from '../models/AuditLog';
 import { authenticate, requireAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
 const router = Router();
 
+// Writes here clear the matching cached public responses
+router.use(invalidateOnWrite('banners'));
+
 // Get active banners by position (public)
 router.get(
   '/position/:position',
+  cacheResponse('banners', 120),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { position } = req.params;
     const now = new Date();
@@ -41,6 +46,7 @@ router.get(
 // Get all active banners (public)
 router.get(
   '/active',
+  cacheResponse('banners', 120),
   asyncHandler(async (_req: AuthRequest, res: Response) => {
     const now = new Date();
 

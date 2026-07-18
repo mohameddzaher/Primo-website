@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { HiOutlineMail } from 'react-icons/hi';
-import { useQuery } from '@tanstack/react-query';
-import { newsletterApi, cmsApi } from '@/lib/api';
+import { newsletterApi } from '@/lib/api';
 import { Button } from '@/components/ui';
 import toast from 'react-hot-toast';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 const defaultContent = {
   badge: 'Newsletter',
@@ -23,14 +24,11 @@ const defaultContent = {
 };
 
 export function Newsletter() {
+  const t = useT();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { data: cmsData } = useQuery({
-    queryKey: ['cms-homepage-newsletter'],
-    queryFn: () => cmsApi.getContent('homepage_newsletter'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: cmsData } = useCmsContent('homepage_newsletter');
 
   let content = defaultContent;
   try {
@@ -49,10 +47,10 @@ export function Newsletter() {
     setIsLoading(true);
     try {
       await newsletterApi.subscribe(email);
-      toast.success('Successfully subscribed! Check your email for confirmation.');
+      toast.success(t('home.newsletterSuccess'));
       setEmail('');
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to subscribe');
+      toast.error(error.response?.data?.message || t('home.newsletterError'));
     } finally {
       setIsLoading(false);
     }
@@ -130,14 +128,14 @@ export function Newsletter() {
               <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
                   <label htmlFor="newsletter-email" className="sr-only">
-                    Email address
+                    {t('home.newsletterEmailLabel')}
                   </label>
                   <input
                     id="newsletter-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your email address"
+                    placeholder={t('home.newsletterEmailPlaceholder')}
                     required
                     className="w-full px-4 py-3 bg-beige-50 border border-beige-200 rounded-lg text-dark-900 placeholder:text-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all text-sm"
                   />
@@ -148,9 +146,11 @@ export function Newsletter() {
               </form>
 
               <p className="mt-3 text-[10px] text-dark-400 text-center">
-                By subscribing, you agree to our{' '}
-                <a href="/privacy" className="underline hover:text-dark-600">Privacy Policy</a>
-                . Unsubscribe anytime.
+                {t('home.newsletterConsentPrefix')}{' '}
+                <a href="/privacy" className="underline hover:text-dark-600">
+                  {t('footer.privacyPolicy')}
+                </a>
+                {t('home.newsletterConsentSuffix')}
               </p>
 
               {/* Trust Badges */}
@@ -159,19 +159,19 @@ export function Newsletter() {
                   <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  No spam
+                  {t('home.noSpam')}
                 </span>
                 <span className="flex items-center gap-1">
                   <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Weekly updates
+                  {t('home.weeklyUpdates')}
                 </span>
                 <span className="flex items-center gap-1">
                   <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Unsubscribe anytime
+                  {t('home.unsubscribeAnytime')}
                 </span>
               </div>
             </div>

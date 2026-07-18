@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { cmsApi } from '@/lib/api';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 interface AnnouncementMessage {
   text: string;
@@ -16,14 +16,11 @@ interface AnnouncementBarData {
 }
 
 export function AnnouncementBar() {
+  const t = useT();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [fade, setFade] = useState(true);
 
-  const { data: cmsContent } = useQuery({
-    queryKey: ['cms-homepage_announcement_bar'],
-    queryFn: () => cmsApi.getContent('homepage_announcement_bar'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: cmsContent } = useCmsContent('homepage_announcement_bar');
 
   let config: AnnouncementBarData | null = null;
   try {
@@ -51,7 +48,7 @@ export function AnnouncementBar() {
   }, [activeMessages.length]);
 
   // No CMS data yet → show default bar so it never flashes empty
-  const fallbackText = 'Free shipping on orders over EGP 500 🚚';
+  const fallbackText = t('home.freeShippingDefault');
   const displayText = activeMessages.length > 0 ? activeMessages[currentIndex]?.text : null;
 
   // Hide only if explicitly disabled
@@ -63,14 +60,14 @@ export function AnnouncementBar() {
         href="/track-order"
         className="text-[10px] sm:text-xs text-white/90 hover:text-white font-medium transition-colors whitespace-nowrap underline-offset-2 hover:underline"
       >
-        Track Order
+        {t('nav.trackOrder')}
       </Link>
       <span className="text-white/30 text-xs">|</span>
       <Link
         href="/help"
         className="text-[10px] sm:text-xs text-white/90 hover:text-white font-medium transition-colors whitespace-nowrap underline-offset-2 hover:underline"
       >
-        Help Center
+        {t('home.helpCenter')}
       </Link>
     </div>
   );

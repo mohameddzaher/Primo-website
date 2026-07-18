@@ -4,7 +4,8 @@
 
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
-import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { authenticate, requireAdminOnly, AuthRequest } from '../middleware/auth';
+import { invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 import { Product } from '../models/Product';
 import { StockMovement } from '../models/StockMovement';
@@ -12,13 +13,16 @@ import { Order } from '../models/Order';
 
 const router = Router();
 
+// Stock/rating changes here must refresh cached product listings
+router.use(invalidateOnWrite('products'));
+
 // ============================================
 // GET /dashboard - Inventory overview stats
 // ============================================
 router.get(
   '/dashboard',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // Total active products
     const totalProducts = await Product.countDocuments({ isActive: true });
@@ -107,7 +111,7 @@ router.get(
 router.get(
   '/products',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
@@ -184,7 +188,7 @@ router.get(
 router.patch(
   '/products/:id/stock',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { quantity, type, reason } = req.body;
@@ -271,7 +275,7 @@ router.patch(
 router.post(
   '/bulk-update',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { updates } = req.body;
 
@@ -345,7 +349,7 @@ router.post(
 router.get(
   '/movements',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
@@ -409,7 +413,7 @@ router.get(
 router.post(
   '/movements',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { productId, type, quantity, reason, reference, notes } = req.body;
 
@@ -491,7 +495,7 @@ router.post(
 router.get(
   '/alerts',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const alerts = await Product.aggregate([
       {
@@ -538,7 +542,7 @@ router.get(
 router.post(
   '/backfill',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // Find all non-cancelled orders that don't have stock movements
     const orders = await Order.find({

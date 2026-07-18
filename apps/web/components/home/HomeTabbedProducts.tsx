@@ -4,9 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { HiArrowRight } from 'react-icons/hi';
-import { productsApi, cmsApi } from '@/lib/api';
+import { productsApi } from '@/lib/api';
 import { ProductCard } from '@/components/product/ProductCard';
 import { ProductGridSkeleton } from '@/components/ui';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
   try {
@@ -60,11 +62,8 @@ const TAB_LINKS: Record<TabId, string> = {
 };
 
 export function HomeTabbedProducts() {
-  const { data: cms } = useQuery({
-    queryKey: ['cms-homepage_tabbed_products'],
-    queryFn: () => cmsApi.getContent('homepage_tabbed_products'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const t = useT();
+  const { data: cms } = useCmsContent('homepage_tabbed_products');
 
   const settings = parseCmsJson(cms, defaultSettings);
 
@@ -131,13 +130,15 @@ export function HomeTabbedProducts() {
                 href={TAB_LINKS[validActiveTab as TabId] || '/products'}
                 className="inline-flex items-center gap-2 px-5 py-2.5 border border-dark-300 text-dark-700 text-sm font-medium rounded-xl hover:bg-dark-50 hover:border-dark-400 transition-colors"
               >
-                View All {enabledTabs.find((t) => t.id === validActiveTab)?.label}
-                <HiArrowRight size={14} />
+                {t('home.viewAllTab', {
+                  label: enabledTabs.find((tab) => tab.id === validActiveTab)?.label ?? '',
+                })}
+                <HiArrowRight size={14} className="rtl-flip" />
               </Link>
             </div>
           </>
         ) : (
-          <div className="text-center py-12 text-dark-400 text-sm">No products available.</div>
+          <div className="text-center py-12 text-dark-400 text-sm">{t('home.noProductsAvailable')}</div>
         )}
       </div>
     </section>

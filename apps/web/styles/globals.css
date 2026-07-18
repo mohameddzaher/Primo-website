@@ -360,3 +360,48 @@
 .toast-custom {
   @apply !bg-white !text-dark-900 !rounded-xl !shadow-soft-lg !border !border-beige-200;
 }
+
+/* ============================================
+   RTL / Arabic support
+   ============================================
+   The locale is applied by I18nProvider, which sets `dir` and `lang` on <html>
+   and toggles the `.rtl` class. Layout mirroring is handled natively by the
+   browser via dir="rtl"; the rules below cover the cases it can't:
+   typography, and the handful of places using physical (left/right) offsets. */
+
+/* Arabic typeface — Inter/Outfit carry no Arabic glyphs. */
+html[dir='rtl'] body,
+html.rtl body {
+  font-family: var(--font-arabic), 'Tajawal', system-ui, sans-serif;
+}
+
+html[dir='rtl'] .font-display,
+html.rtl .font-display {
+  font-family: var(--font-arabic), 'Tajawal', system-ui, sans-serif;
+}
+
+/* Arabic reads better with slightly more line height at small sizes. */
+html[dir='rtl'] body {
+  line-height: 1.7;
+}
+
+/* Keep prices, SKUs, phone numbers and dates left-to-right inside RTL text,
+   otherwise "SAR 1,748" renders with the parts reordered. */
+html[dir='rtl'] .ltr-nums,
+html[dir='rtl'] .price,
+html[dir='rtl'] time {
+  direction: ltr;
+  unicode-bidi: embed;
+  display: inline-block;
+}
+
+/* Horizontal carousels/rails must scroll from the right in RTL. */
+html[dir='rtl'] .overflow-x-auto {
+  direction: rtl;
+}
+
+/* Mirror icons that encode direction (chevrons/arrows). Icons that are
+   symmetric or brand marks are unaffected. */
+html[dir='rtl'] .rtl-flip {
+  transform: scaleX(-1);
+}

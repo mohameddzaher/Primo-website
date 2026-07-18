@@ -11,6 +11,8 @@ import {
 } from 'react-icons/hi';
 import { Button, Card } from '@/components/ui';
 import { ordersApi } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
+import type { TranslationKey } from '@/lib/i18n';
 
 const statusColors: Record<string, string> = {
   new: 'bg-blue-100 text-blue-800',
@@ -26,7 +28,24 @@ const statusColors: Record<string, string> = {
   failed: 'bg-red-100 text-red-800',
 };
 
+// Status → translation key. Falls back to the raw status when the backend
+// introduces a state the storefront doesn't know about yet.
+const statusKeys: Record<string, TranslationKey> = {
+  new: 'order.status.new',
+  pending: 'shop.order.status.pending',
+  accepted: 'order.status.accepted',
+  confirmed: 'shop.order.status.confirmed',
+  in_progress: 'order.status.in_progress',
+  processing: 'shop.order.status.processing',
+  out_for_delivery: 'order.status.out_for_delivery',
+  shipped: 'shop.order.status.shipped',
+  delivered: 'order.status.delivered',
+  cancelled: 'order.status.cancelled',
+  failed: 'order.status.failed',
+};
+
 export default function OrdersPage() {
+  const { t, intlLocale } = useI18n();
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
@@ -38,7 +57,7 @@ export default function OrdersPage() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-semibold text-dark-900">My Orders</h1>
+        <h1 className="text-2xl font-semibold text-dark-900">{t('account.myOrders')}</h1>
         {[...Array(3)].map((_, i) => (
           <div key={i} className="bg-white rounded-xl p-6 animate-pulse">
             <div className="h-4 bg-beige-200 rounded w-1/4 mb-4"></div>
@@ -54,17 +73,17 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-dark-900">My Orders</h1>
+      <h1 className="text-2xl font-semibold text-dark-900">{t('account.myOrders')}</h1>
 
       {orders.length === 0 ? (
         <Card padding="lg" className="text-center py-12">
           <HiOutlineShoppingBag className="mx-auto h-16 w-16 text-beige-400 mb-4" />
-          <h3 className="text-lg font-medium text-dark-900 mb-2">No orders yet</h3>
+          <h3 className="text-lg font-medium text-dark-900 mb-2">{t('account.noOrders')}</h3>
           <p className="text-dark-500 mb-6">
-            Start shopping to see your orders here
+            {t('shop.orders.emptyHint')}
           </p>
           <Link href="/products">
-            <Button>Browse Products</Button>
+            <Button>{t('shop.browseProducts')}</Button>
           </Link>
         </Card>
       ) : (
@@ -81,42 +100,45 @@ export default function OrdersPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="font-semibold text-dark-900">
-                        Order #{order.orderNumber}
+                        {t('shop.orders.orderNo', { number: order.orderNumber })}
                       </span>
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium ${
                           statusColors[order.status] || 'bg-gray-100 text-gray-800'
                         }`}
                       >
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                        {statusKeys[order.status]
+                          ? t(statusKeys[order.status])
+                          : order.status}
                       </span>
                     </div>
                     <div className="text-sm text-dark-500 space-y-1">
                       <p>
-                        Placed on{' '}
-                        {new Date(order.createdAt).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
+                        {t('shop.orders.placedOn', {
+                          date: new Date(order.createdAt).toLocaleDateString(intlLocale, {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          }),
                         })}
                       </p>
-                      <p>{order.items?.length || 0} items</p>
+                      <p>{t('home.items', { count: order.items?.length || 0 })}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-lg font-semibold text-dark-900">
-                        EGP {order.total?.toLocaleString()}
+                    <div className="text-end">
+                      <p className="text-lg font-semibold text-dark-900 ltr-nums">
+                        SAR {order.total?.toLocaleString()}
                       </p>
                       <p className="text-xs text-dark-500">
-                        {order.paymentMethod === 'cash_on_delivery' ? 'Cash on Delivery' :
-                         order.paymentMethod === 'apple_pay' ? 'Apple Pay' : 'Card'}
+                        {order.paymentMethod === 'cash_on_delivery' ? t('checkout.cashOnDelivery') :
+                         order.paymentMethod === 'apple_pay' ? t('checkout.applePay') : t('checkout.card')}
                       </p>
                     </div>
                     <Link href={`/account/orders/${order.orderNumber}`}>
                       <Button variant="outline" size="sm" leftIcon={<HiOutlineEye size={16} />}>
-                        View
+                        {t('shop.view')}
                       </Button>
                     </Link>
                   </div>
@@ -165,10 +187,10 @@ export default function OrdersPage() {
                 disabled={page === 1}
                 onClick={() => setPage(page - 1)}
               >
-                Previous
+                {t('common.previous')}
               </Button>
               <span className="text-sm text-dark-500">
-                Page {page} of {pagination.totalPages}
+                {t('shop.products.pageOf', { page, total: pagination.totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -176,7 +198,7 @@ export default function OrdersPage() {
                 disabled={page === pagination.totalPages}
                 onClick={() => setPage(page + 1)}
               >
-                Next
+                {t('common.next')}
               </Button>
             </div>
           )}

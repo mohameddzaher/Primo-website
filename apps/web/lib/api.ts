@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { ApiResponse } from '@primo/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1';
 
 // Token management
 let accessToken: string | null = null;
@@ -312,14 +312,23 @@ export const brandsApi = {
 export const cartApi = {
   get: () => apiGet<any>('/cart'),
 
-  addItem: (productId: string, quantity: number) =>
-    apiPost<any>('/cart/items', { productId, quantity }),
+  // `variantId` is optional — omitted for products without options, which is
+  // every existing call site.
+  addItem: (productId: string, quantity: number, variantId?: string) =>
+    apiPost<any>('/cart/items', { productId, quantity, ...(variantId ? { variantId } : {}) }),
 
-  updateQuantity: (productId: string, quantity: number) =>
-    apiPatch<any>(`/cart/items/${productId}`, { quantity }),
+  // `variantId` targets one option's line; without it the server falls back to
+  // the single line for that product (products that have no variants).
+  updateQuantity: (productId: string, quantity: number, variantId?: string) =>
+    apiPatch<any>(`/cart/items/${productId}`, {
+      quantity,
+      ...(variantId ? { variantId } : {}),
+    }),
 
-  removeItem: (productId: string) =>
-    apiDelete<any>(`/cart/items/${productId}`),
+  removeItem: (productId: string, variantId?: string) =>
+    apiDelete<any>(
+      `/cart/items/${productId}${variantId ? `?variantId=${encodeURIComponent(variantId)}` : ''}`
+    ),
 
   clear: () => apiDelete<any>('/cart'),
 
@@ -541,6 +550,34 @@ export const referralsApi = {
     apiPost<{ referralCode: string }>('/referrals/generate'),
 };
 
+export const returnsApi = {
+  // Customer: request a return against a delivered order
+  create: (data: {
+    orderId: string;
+    reason: string;
+    description?: string;
+    items: { productId: string; quantity: number; reason?: string }[];
+  }) => apiPost<any>('/returns', data),
+
+  // Customer: their own returns
+  getMy: async (params?: { page?: number; limit?: number }) => {
+    const result = await apiGetPaginated<any[]>('/returns/my', params);
+    return { returns: result.data, pagination: result.pagination };
+  },
+
+  // Admin: all returns, filterable by status
+  getAll: async (params?: { page?: number; limit?: number; status?: string; search?: string }) => {
+    const result = await apiGetPaginated<any[]>('/returns', params);
+    return { returns: result.data, pagination: result.pagination };
+  },
+
+  // Admin: approve / reject / receive / refund
+  updateStatus: (
+    id: string,
+    data: { status: string; adminNote?: string; refundAmount?: number }
+  ) => apiPatch<any>(`/returns/${id}/status`, data),
+};
+
 // Admin APIs
 export const adminApi = {
   // Dashboard
@@ -608,6 +645,22 @@ export const adminApi = {
 
   updateOrderStatus: (id: string, status: string, note?: string) =>
     apiPatch<any>(`/orders/${id}/status`, { status, note }),
+
+  // Shipment tracking — trackingUrl is derived server-side from the carrier
+  // when it isn't supplied.
+  updateOrderShipment: (
+    id: string,
+    data: {
+      carrier: string;
+      trackingNumber: string;
+      trackingUrl?: string;
+      estimatedDelivery?: string;
+    }
+  ) => apiPatch<any>(`/orders/${id}/shipment`, data),
+
+  // Partial or full refund against a paid order.
+  refundOrder: (id: string, data: { amount: number; reason?: string }) =>
+    apiPost<any>(`/orders/${id}/refund`, data),
 
   // Customers (users are at /admin/customers on backend)
   getUsers: async (params?: any) => {

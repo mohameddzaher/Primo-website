@@ -177,14 +177,14 @@ export default function NewOfferPage() {
                 {...register('type')}
               >
                 <option value="percentage">Percentage (%)</option>
-                <option value="fixed">Fixed Amount (EGP)</option>
+                <option value="fixed">Fixed Amount (SAR)</option>
                 <option value="buy_x_get_y">Buy X Get Y</option>
                 <option value="bundle">Bundle Deal</option>
               </select>
             </div>
 
             <Input
-              label={`Discount Value ${discountType === 'percentage' ? '(%)' : discountType === 'fixed' ? '(EGP)' : ''}`}
+              label={`Discount Value ${discountType === 'percentage' ? '(%)' : discountType === 'fixed' ? '(SAR)' : ''}`}
               type="number"
               placeholder={discountType === 'percentage' ? '20' : '100'}
               error={errors.value?.message}
@@ -194,14 +194,14 @@ export default function NewOfferPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Minimum Order Amount (EGP)"
+              label="Minimum Order Amount (SAR)"
               type="number"
               placeholder="Optional"
               {...register('minOrderAmount', { valueAsNumber: true })}
             />
 
             <Input
-              label="Max Discount (EGP)"
+              label="Max Discount (SAR)"
               type="number"
               placeholder="Optional — cap for percentage discounts"
               {...register('maxDiscount', { valueAsNumber: true })}
@@ -277,7 +277,7 @@ export default function NewOfferPage() {
                       )}
                       <div>
                         <p className="text-sm font-medium text-dark-800">{product.name}</p>
-                        <p className="text-xs text-dark-500">EGP {product.price?.toLocaleString()}</p>
+                        <p className="text-xs text-dark-500">SAR {product.price?.toLocaleString()}</p>
                       </div>
                     </button>
                   ))}

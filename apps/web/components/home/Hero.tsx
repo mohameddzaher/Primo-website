@@ -8,6 +8,7 @@ import { HiArrowRight, HiOutlineSearch } from 'react-icons/hi';
 import { useQuery } from '@tanstack/react-query';
 import { bannersApi, cmsApi } from '@/lib/api';
 import { Button } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 const defaultQuickCategories = [
   { emoji: '🍳', label: 'Kitchen', href: '/categories/kitchen-appliances' },
@@ -72,6 +73,7 @@ function parseCmsJson(cmsData: any, defaultVal: any) {
 }
 
 export function Hero() {
+  const t = useT();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -96,7 +98,7 @@ export function Hero() {
     subtitle: b.subtitle,
     description: b.subtitle,
     image: { url: b.image },
-    buttonText: b.linkText || 'Shop Now',
+    buttonText: b.linkText || t('home.shopNow'),
     buttonLink: b.link || '/products',
     backgroundColor: b.backgroundColor,
   })) || [];
@@ -198,17 +200,18 @@ export function Hero() {
                 className="mt-6 flex gap-2 max-w-md"
               >
                 <div className="flex-1 relative">
-                  <HiOutlineSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" size={20} />
+                  <HiOutlineSearch className="absolute start-3 top-1/2 -translate-y-1/2 text-dark-400" size={20} />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search products..."
-                    className="w-full pl-10 pr-4 py-3 bg-white rounded-lg text-dark-900 placeholder:text-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                    placeholder={t('home.heroSearchPlaceholder')}
+                    aria-label={t('nav.search')}
+                    className="w-full ps-10 pe-4 py-3 bg-white rounded-lg text-dark-900 placeholder:text-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                   />
                 </div>
                 <Button type="submit">
-                  Search
+                  {t('nav.search')}
                 </Button>
               </motion.form>
 
@@ -241,9 +244,9 @@ export function Hero() {
                 <Link href={currentBanner.buttonLink || '/products'}>
                   <Button
                     size="lg"
-                    rightIcon={<HiArrowRight size={16} />}
+                    rightIcon={<HiArrowRight size={16} className="rtl-flip" />}
                   >
-                    {currentBanner.buttonText || 'Shop Now'}
+                    {currentBanner.buttonText || t('home.shopNow')}
                   </Button>
                 </Link>
               </motion.div>
@@ -271,7 +274,7 @@ export function Hero() {
                     <h3 className="mt-2 font-semibold text-white">{promo.title}</h3>
                     <p className="text-xs text-white/80 mt-1">{promo.subtitle}</p>
                     <span className="inline-flex items-center gap-1 text-xs text-white/90 mt-2 group-hover:gap-2 transition-all">
-                      Shop now <HiArrowRight size={12} />
+                      {t('home.shopNow')} <HiArrowRight size={12} className="rtl-flip" />
                     </span>
                   </Link>
                 ))}
@@ -281,6 +284,8 @@ export function Hero() {
         </div>
 
         {/* Slide Indicators */}
+        {/* Centred horizontally — physical offsets are intentional here since
+            centring is direction-agnostic. */}
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex gap-2">
           {slides.map((_: any, index: number) => (
             <button
@@ -292,7 +297,7 @@ export function Hero() {
                   ? 'bg-white w-6'
                   : 'bg-white/40 hover:bg-white/60'
               }`}
-              aria-label={`Go to slide ${index + 1}`}
+              aria-label={t('home.goToSlide', { index: index + 1 })}
             />
           ))}
         </div>

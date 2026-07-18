@@ -91,7 +91,7 @@ export default function AdminCustomersPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-dark-600">{customer.ordersCount || 0}</td>
-                    <td className="px-6 py-4 font-medium text-dark-900">EGP {(customer.totalSpent || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4 font-medium text-dark-900">SAR {(customer.totalSpent || 0).toLocaleString()}</td>
                     <td className="px-6 py-4 text-dark-600">{new Date(customer.createdAt).toLocaleDateString()}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${customer.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>

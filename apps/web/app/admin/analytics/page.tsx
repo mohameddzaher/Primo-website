@@ -26,7 +26,7 @@ export default function AdminAnalyticsPage() {
   const stats = [
     {
       label: 'Total Revenue',
-      value: `EGP ${(analytics?.totalRevenue || 0).toLocaleString()}`,
+      value: `SAR ${(analytics?.totalRevenue || 0).toLocaleString()}`,
       change: analytics?.revenueChange || 0,
       icon: HiOutlineCurrencyDollar,
       color: 'bg-green-100 text-green-600',
@@ -151,7 +151,7 @@ export default function AdminAnalyticsPage() {
                     <p className="text-sm text-dark-500">{product.sold} sold</p>
                   </div>
                   <p className="font-semibold text-dark-900">
-                    EGP {product.revenue?.toLocaleString()}
+                    SAR {product.revenue?.toLocaleString()}
                   </p>
                 </div>
               ))}
@@ -227,7 +227,7 @@ export default function AdminAnalyticsPage() {
                     </td>
                     <td className="py-3 text-sm text-dark-600">{order.customer?.name}</td>
                     <td className="py-3 text-sm font-medium text-dark-900">
-                      EGP {order.total?.toLocaleString()}
+                      SAR {order.total?.toLocaleString()}
                     </td>
                     <td className="py-3">
                       <span

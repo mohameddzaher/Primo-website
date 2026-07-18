@@ -25,8 +25,18 @@ const createTransporter = () => {
   });
 };
 
+// SMTP is optional (dev / CI / self-hosted without mail). When credentials are
+// absent we no-op instead of throwing so callers never fail because of mail.
+const isSmtpConfigured = (): boolean =>
+  Boolean(config.smtp.host && config.smtp.user && config.smtp.pass);
+
 // Send email
 export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
+  if (!isSmtpConfigured()) {
+    console.warn('Email skipped: SMTP is not configured (SMTP_USER/SMTP_PASS missing)');
+    return false;
+  }
+
   try {
     const transporter = createTransporter();
 
@@ -246,6 +256,134 @@ export const sendOrderConfirmationEmail = async (
   return sendEmail({
     to: email,
     subject: `Order Confirmed - ${orderNumber}`,
+    html,
+  });
+};
+
+// Send order status update email to the CUSTOMER who placed the order
+export const sendOrderStatusEmail = async (
+  email: string,
+  orderNumber: string,
+  status: string,
+  statusLabel: string,
+  orderDetails: {
+    customerName?: string;
+    items: Array<{ title: string; quantity: number; price: number }>;
+    total: number;
+  }
+): Promise<boolean> => {
+  // Subject + lead paragraph per meaningful transition
+  const copy: Record<string, { subject: string; heading: string; message: string }> = {
+    accepted: {
+      subject: `Order Confirmed - ${orderNumber}`,
+      heading: 'Your order has been accepted',
+      message: "We've accepted your order and started preparing it. We'll let you know as soon as it's on its way.",
+    },
+    out_for_delivery: {
+      subject: `Your Order is Out for Delivery - ${orderNumber}`,
+      heading: 'Your order is on its way',
+      message: 'Your order has left our warehouse and is out for delivery. Please make sure someone is available to receive it.',
+    },
+    delivered: {
+      subject: `Order Delivered - ${orderNumber}`,
+      heading: 'Your order has been delivered',
+      message: 'Your order has been delivered. We hope you love it — thank you for shopping with PRIMO.',
+    },
+    cancelled: {
+      subject: `Order Cancelled - ${orderNumber}`,
+      heading: 'Your order has been cancelled',
+      message: 'Your order has been cancelled. Any amount already paid will be refunded to your original payment method.',
+    },
+    failed: {
+      subject: `Delivery Failed - ${orderNumber}`,
+      heading: 'We could not deliver your order',
+      message: 'We were unable to complete the delivery of your order. Our team will contact you shortly to arrange next steps.',
+    },
+  };
+
+  const { subject, heading, message } = copy[status] || {
+    subject: `Order Update - ${orderNumber}`,
+    heading: 'Your order status has changed',
+    message: `Your order status has been updated to: ${statusLabel}.`,
+  };
+
+  const itemsHtml = orderDetails.items
+    .map(
+      (item) => `
+      <tr>
+        <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.title}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">SAR ${(item.price * item.quantity).toFixed(2)}</td>
+      </tr>
+    `
+    )
+    .join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; padding: 20px 0; }
+        .logo { font-size: 28px; font-weight: bold; color: #1a1a1a; }
+        .content { padding: 20px 0; }
+        .order-number { background: #f5f5f5; padding: 15px; border-radius: 4px; text-align: center; font-size: 18px; }
+        .status { display: inline-block; margin-top: 10px; padding: 6px 14px; background: #1a1a1a; color: #fff; border-radius: 999px; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th { text-align: left; padding: 10px; border-bottom: 2px solid #1a1a1a; }
+        .grand-total { font-size: 18px; font-weight: bold; }
+        .button { display: inline-block; padding: 12px 24px; background: #1a1a1a; color: white; text-decoration: none; border-radius: 4px; }
+        .footer { padding: 20px 0; text-align: center; font-size: 12px; color: #666; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">PRIMO</div>
+        </div>
+        <div class="content">
+          <h2>${heading}</h2>
+          <p>${orderDetails.customerName ? `Hi ${orderDetails.customerName},` : 'Hi,'}</p>
+          <p>${message}</p>
+          <div class="order-number">
+            Order Number: <strong>${orderNumber}</strong>
+            <div><span class="status">${statusLabel}</span></div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          <table style="width: 50%; margin-left: auto;">
+            <tr class="grand-total">
+              <td>Total:</td>
+              <td style="text-align: right;">SAR ${orderDetails.total.toFixed(2)}</td>
+            </tr>
+          </table>
+          <p style="text-align: center; margin: 30px 0;">
+            <a href="${config.frontendUrl}/account/orders" class="button">View Order</a>
+          </p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} PRIMO. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject,
     html,
   });
 };

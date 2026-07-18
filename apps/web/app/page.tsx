@@ -1,8 +1,11 @@
 import {
   PromoBanners,
-  HomeQuickStrip,
   HomeSecondaryBanner,
   HomeProductSection,
+  HomeBestSellers,
+  HomeShopByPrice,
+  HomeCategorySpotlight,
+  HomeBuyingGuides,
   HomeNewArrivals,
   HomeWideBanner,
   HomeHowToOrder,
@@ -14,19 +17,16 @@ import {
   DealsSection,
   Testimonials,
   Newsletter,
+  RecentlyViewed,
 } from '@/components/home';
-
-// Set to true when trust badges should be visible on the homepage
-const TRUST_BADGES_ENABLED = false;
 
 export default function HomePage() {
   return (
     <>
-      {/* 1. Promo Banners — two stacked image banners, fully admin-controlled */}
+      {/* 1. Promo Banners — the campaign artwork lands immediately under the
+          header. Nothing is allowed above it: the header already carries the
+          category navigation, so anything else here just delays the hero. */}
       <PromoBanners />
-
-      {/* 2. Quick Icon Strip — On Sale, New Arrivals, category shortcuts */}
-      <HomeQuickStrip />
 
       {/* 3. Secondary promo banner — admin banners (position: home_secondary) */}
       <HomeSecondaryBanner />
@@ -43,17 +43,28 @@ export default function HomePage() {
         limit={8}
       />
 
+      {/* 4b. Best Sellers — what customers actually buy; strongest social proof
+          on the page. Hides itself until something has genuinely sold. */}
+      <HomeBestSellers />
+
+      {/* 4c. Shop by Price — budget-first entry points into the filtered
+          listing, for visitors who know their spend but not their category. */}
+      <HomeShopByPrice />
+
       {/* 5. On Sale — high conversion, show discounted items */}
       <HomeProductSection
         queryKey="products-on-sale-section"
         title="On Sale"
         subtitle="Limited-time offers"
         viewAllHref="/products?onSale=true"
-        queryParams={{ onSale: true, sort: '-discount' }}
+        queryParams={{ onSale: true, sort: 'discount' }}
         tabId="on_sale"
         bg="bg-white"
         limit={8}
       />
+
+      {/* 5b. Recently Viewed — personalised re-entry point, hides itself when empty */}
+      <RecentlyViewed />
 
       {/* 6. New Arrivals carousel — horizontal scroll, freshness signal */}
       <HomeNewArrivals />
@@ -67,7 +78,7 @@ export default function HomePage() {
         title="Top Rated"
         subtitle="Customer favourites"
         viewAllHref="/products?sort=rating"
-        queryParams={{ sort: '-averageRating' }}
+        queryParams={{ sort: 'rating' }}
         tabId="top_rated"
         bg="bg-beige-50"
         limit={8}
@@ -80,14 +91,28 @@ export default function HomePage() {
       {/* 10. Browse by Category — icon grid */}
       <Categories />
 
+      {/* 10b. Category Spotlight — takes the largest category from the grid
+          above and shows what's actually on its shelf. */}
+      <HomeCategorySpotlight />
+
       {/* 11. Authorized Brands carousel — trust + click to filter */}
       <Brands />
 
       {/* 12. How to Order — reduce purchase friction */}
       <HomeHowToOrder />
 
+      {/* 12b. Service promises — free delivery, VAT, authorized dealer, returns.
+          Kept OUT of the hero area: the top of the page is for the campaign
+          artwork and the products. These read better as reassurance further
+          down, next to the other trust content. */}
+      <Features />
+
       {/* 13. Why Choose Us — trust building */}
       <WhyChooseUs />
+
+      {/* 13b. Buying Guides — keeps considered-purchase research on-site.
+          Renders nothing when no blog posts are published. */}
+      <HomeBuyingGuides />
 
       {/* 14. Customer Testimonials — social proof */}
       <Testimonials />
@@ -95,11 +120,7 @@ export default function HomePage() {
       {/* 15. Download PRIMO App — mobile conversion */}
       <HomeAppDownload />
 
-      {/* 16. Trust badges — free shipping, warranty, returns, support */}
-      {/* Toggle TRUST_BADGES_ENABLED = true above to re-enable */}
-      {TRUST_BADGES_ENABLED && <Features />}
-
-      {/* 17. Newsletter — retain visitors */}
+      {/* 16. Newsletter — retain visitors */}
       <Newsletter />
     </>
   );

@@ -120,6 +120,20 @@ export const productFAQSchema = z.object({
   order: z.number().int().min(0),
 });
 
+// A single purchasable option (Colour / Capacity / Size …). `priceModifier` is a
+// +/- SAR adjustment on the discounted base price; `stockQuantity` is the
+// variant's OWN stock and is what gets checked and decremented at checkout.
+export const productVariantSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, 'Option name is required').max(50),
+  value: z.string().min(1, 'Option value is required').max(100),
+  sku: z.string().min(1, 'Variant SKU is required').max(50),
+  priceModifier: z.number().default(0),
+  stockQuantity: z.number().int('Stock must be a whole number').min(0, 'Stock cannot be negative'),
+  image: z.string().optional(),
+  isDefault: z.boolean().optional(),
+});
+
 export const createProductSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(200, 'Title must be at most 200 characters'),
   brand: z.string().min(1, 'Brand is required').max(100),
@@ -136,6 +150,8 @@ export const createProductSchema = z.object({
   discountEndsAt: z.string().datetime().optional(),
   stockQuantity: z.number({ required_error: 'Stock quantity is required', invalid_type_error: 'Stock quantity must be a number' }).int('Stock quantity must be a whole number').min(0, 'Stock quantity cannot be negative'),
   lowStockThreshold: z.number().int().min(0).default(5),
+  // Optional — omit or send [] for a product without options.
+  variants: z.array(productVariantSchema).default([]),
   images: z.array(productImageSchema).min(1, 'At least one product image is required'),
   categoryId: z.string({ required_error: 'Category is required' }).min(1, 'Category is required'),
   subcategoryId: z.string().optional(),
@@ -201,6 +217,9 @@ export const createOrderSchema = z.object({
     .array(
       z.object({
         productId: z.string({ required_error: 'Product ID is required' }),
+        // Optional selected variant. The server re-resolves its price and stock
+        // from the DB — the client never dictates either.
+        variantId: z.string().optional(),
         quantity: z.number().int().positive('Quantity must be at least 1'),
       })
     )
@@ -209,6 +228,11 @@ export const createOrderSchema = z.object({
   paymentMethod: z.enum(['cash_on_delivery', 'card', 'apple_pay'], { required_error: 'Payment method is required' }),
   discountCode: z.string().optional(),
   notes: z.string().max(500).optional(),
+  // Loyalty points the customer chose to redeem. Must be declared here —
+  // `validate()` replaces req.body with the parsed result, so an undeclared
+  // field is silently dropped and the customer would be charged the full price
+  // while their points are never deducted.
+  redeemPoints: z.number().int().min(0).optional(),
 });
 
 export const updateOrderStatusSchema = z.object({
@@ -241,11 +265,14 @@ export const moderateReviewSchema = z.object({
 // ================== CART SCHEMAS ==================
 export const addToCartSchema = z.object({
   productId: z.string(),
+  variantId: z.string().optional(),
   quantity: z.number().int().positive().default(1),
 });
 
 export const updateCartItemSchema = z.object({
   quantity: z.number().int().min(0),
+  // Targets one specific variant line; omitted = the line without a variant.
+  variantId: z.string().optional(),
 });
 
 // ================== OFFER SCHEMAS ==================

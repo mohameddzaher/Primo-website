@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getDiscountedPrice } from '@/lib/utils';
 import ProductDetailClient from './ProductDetailClient';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1';
@@ -16,6 +17,26 @@ async function getProduct(slug: string): Promise<any | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The price a shopper actually pays: the discount only applies while it is
+ * live (no end date, or an end date still in the future). Publishing the
+ * pre-discount price here causes Google Merchant Center price mismatches.
+ */
+function sellingPrice(product: any): { price: number; validUntil?: string } {
+  const base = Number(product?.price) || 0;
+  const discount = Number(product?.discount) || 0;
+  if (discount <= 0) return { price: base };
+
+  const endsAt = product?.discountEndsAt ? new Date(product.discountEndsAt) : null;
+  const isLive = !endsAt || (!Number.isNaN(endsAt.getTime()) && endsAt.getTime() > Date.now());
+  if (!isLive) return { price: base };
+
+  return {
+    price: getDiscountedPrice(base, discount),
+    validUntil: endsAt ? endsAt.toISOString().split('T')[0] : undefined,
+  };
 }
 
 function primaryImage(product: any): string | undefined {
@@ -76,6 +97,11 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
   const product = await getProduct(params.slug);
 
   // Product structured data (Schema.org) for rich search results.
+  const offer = product ? sellingPrice(product) : null;
+  const inStock = (product?.stockQuantity ?? product?.stock ?? 0) > 0;
+  const reviewCount = Number(product?.reviewCount) || 0;
+  const averageRating = Number(product?.averageRating) || 0;
+
   const jsonLd = product
     ? {
         '@context': 'https://schema.org',
@@ -86,22 +112,24 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
         sku: product.sku,
         brand: product.brand ? { '@type': 'Brand', name: product.brand } : undefined,
         aggregateRating:
-          product.reviewCount > 0
+          reviewCount > 0 && averageRating > 0
             ? {
                 '@type': 'AggregateRating',
-                ratingValue: product.averageRating,
-                reviewCount: product.reviewCount,
+                ratingValue: averageRating,
+                reviewCount,
               }
             : undefined,
         offers: {
           '@type': 'Offer',
           url: `${APP_URL}/products/${product.slug}`,
-          priceCurrency: 'EGP',
-          price: product.price ?? 0,
-          availability:
-            (product.stockQuantity ?? 0) > 0
-              ? 'https://schema.org/InStock'
-              : 'https://schema.org/OutOfStock',
+          priceCurrency: 'SAR',
+          // Actual selling price (post-discount while the discount is live)
+          price: offer!.price,
+          priceValidUntil: offer!.validUntil,
+          itemCondition: 'https://schema.org/NewCondition',
+          availability: inStock
+            ? 'https://schema.org/InStock'
+            : 'https://schema.org/OutOfStock',
         },
       }
     : null;

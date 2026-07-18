@@ -21,6 +21,15 @@ export interface IOrderItem {
   productId: mongoose.Types.ObjectId;
   title: string;
   sku: string;
+  /**
+   * Selected variant, snapshotted at purchase time. Denormalised on purpose:
+   * the customer, the invoice and the warehouse pick-list must show exactly
+   * what was bought even if the admin later renames or deletes the variant.
+   * `sku` above is the variant's SKU when a variant was chosen.
+   */
+  variantId?: string;
+  variantName?: string;
+  variantValue?: string;
   price: number;
   originalPrice?: number;
   discount?: number;
@@ -52,6 +61,21 @@ export interface IOrderAddress {
   };
 }
 
+export interface IOrderShipment {
+  carrier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  shippedAt?: Date;
+  estimatedDelivery?: Date;
+}
+
+export interface IOrderRefund {
+  amount: number;
+  reason?: string;
+  refundedAt: Date;
+  refundedBy?: mongoose.Types.ObjectId;
+}
+
 export interface IOrder extends Document {
   _id: mongoose.Types.ObjectId;
   orderNumber: string;
@@ -72,8 +96,11 @@ export interface IOrder extends Document {
   paymentStatus: PaymentStatus;
   paymentIntentId?: string;
   shippingAddress: IOrderAddress;
+  shipment?: IOrderShipment;
+  refunds: IOrderRefund[];
   notes?: string;
   estimatedDelivery?: Date;
+  paidAt?: Date;
   deliveredAt?: Date;
   cancelledAt?: Date;
   cancelReason?: string;
@@ -90,6 +117,9 @@ const orderItemSchema = new Schema<IOrderItem>(
     },
     title: { type: String, required: true },
     sku: { type: String, required: true },
+    variantId: String,
+    variantName: String,
+    variantValue: String,
     price: { type: Number, required: true },
     originalPrice: { type: Number },
     discount: { type: Number, min: 0, max: 100 },
@@ -132,6 +162,34 @@ const orderAddressSchema = new Schema<IOrderAddress>(
     coordinates: {
       lat: Number,
       lng: Number,
+    },
+  },
+  { _id: false }
+);
+
+// Carrier / tracking details, set by an admin once the parcel is handed over.
+const orderShipmentSchema = new Schema<IOrderShipment>(
+  {
+    carrier: String,
+    trackingNumber: String,
+    trackingUrl: String,
+    shippedAt: Date,
+    estimatedDelivery: Date,
+  },
+  { _id: false }
+);
+
+// One entry per (possibly partial) refund issued against the order. The sum of
+// `amount` across this array can never exceed the order total — enforced by a
+// guarded atomic update in the refund route.
+const orderRefundSchema = new Schema<IOrderRefund>(
+  {
+    amount: { type: Number, required: true, min: 0 },
+    reason: String,
+    refundedAt: { type: Date, required: true, default: Date.now },
+    refundedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
     },
   },
   { _id: false }
@@ -210,8 +268,18 @@ const orderSchema = new Schema<IOrder>(
       type: orderAddressSchema,
       required: true,
     },
+    shipment: {
+      type: orderShipmentSchema,
+      default: undefined,
+    },
+    refunds: {
+      type: [orderRefundSchema],
+      default: [],
+    },
     notes: String,
     estimatedDelivery: Date,
+    // Set only when a PSP confirms payment (or COD is collected on delivery).
+    paidAt: Date,
     deliveredAt: Date,
     cancelledAt: Date,
     cancelReason: String,
@@ -237,6 +305,7 @@ orderSchema.index({ 'shippingAddress.phone': 1 });
 orderSchema.index({ 'shippingAddress.email': 1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ userId: 1, createdAt: -1 }); // customer order history (/my-orders)
+orderSchema.index({ 'shipment.trackingNumber': 1 }, { sparse: true }); // carrier lookups
 // paymentStatus already indexed via `index: true` on the field definition.
 
 export const Order = mongoose.model<IOrder>('Order', orderSchema);

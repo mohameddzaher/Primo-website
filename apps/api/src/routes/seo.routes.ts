@@ -4,7 +4,7 @@
 
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
-import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { authenticate, requireAdminOnly, AuthRequest } from '../middleware/auth';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 import { SEOPage } from '../models/SEOPage';
 import { SEORedirect } from '../models/SEORedirect';
@@ -22,7 +22,7 @@ const router = Router();
 router.get(
   '/dashboard',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (_req: AuthRequest, res: Response) => {
     const [
       totalPages,
@@ -73,7 +73,7 @@ router.get(
 router.get(
   '/pages',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
@@ -114,7 +114,7 @@ router.get(
 router.post(
   '/pages',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const {
       path,
@@ -165,7 +165,7 @@ router.post(
 router.get(
   '/pages/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -189,7 +189,7 @@ router.get(
 router.patch(
   '/pages/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -235,7 +235,7 @@ router.patch(
 router.delete(
   '/pages/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -263,7 +263,7 @@ router.delete(
 router.get(
   '/products',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
@@ -322,7 +322,7 @@ router.get(
 router.patch(
   '/products/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -359,7 +359,7 @@ router.patch(
 router.post(
   '/products/bulk',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { updates } = req.body;
 
@@ -419,7 +419,7 @@ router.post(
 router.get(
   '/redirects',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
@@ -460,7 +460,7 @@ router.get(
 router.post(
   '/redirects',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { fromPath, toPath, type, isActive } = req.body;
 
@@ -492,7 +492,7 @@ router.post(
 router.patch(
   '/redirects/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -526,7 +526,7 @@ router.patch(
 router.delete(
   '/redirects/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -554,7 +554,7 @@ router.delete(
 router.get(
   '/keywords',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
@@ -597,7 +597,7 @@ router.get(
 router.post(
   '/keywords',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { keyword, targetPage, currentRank, searchVolume, difficulty, notes } = req.body;
 
@@ -625,7 +625,7 @@ router.post(
 router.patch(
   '/keywords/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -659,7 +659,7 @@ router.patch(
 router.delete(
   '/keywords/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -687,7 +687,7 @@ router.delete(
 router.get(
   '/audit',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (_req: AuthRequest, res: Response) => {
     const products = await Product.find({ isActive: true })
       .select('title slug metaTitle metaDescription images')
@@ -806,7 +806,7 @@ router.get(
 router.post(
   '/seed',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (_req: AuthRequest, res: Response) => {
     const results = {
       pagesCreated: 0,

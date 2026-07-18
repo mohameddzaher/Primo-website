@@ -6,6 +6,12 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ICartItem {
   productId: mongoose.Types.ObjectId;
+  /**
+   * Optional selected product variant. A cart LINE is identified by
+   * (productId, variantId) — the same fridge in two colours is two lines.
+   * Absent on every pre-existing cart item, which keeps meaning "no options".
+   */
+  variantId?: string;
   quantity: number;
   addedAt: Date;
 }
@@ -27,6 +33,9 @@ const cartItemSchema = new Schema<ICartItem>(
       type: Schema.Types.ObjectId,
       ref: 'Product',
       required: true,
+    },
+    variantId: {
+      type: String,
     },
     quantity: {
       type: Number,

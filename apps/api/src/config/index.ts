@@ -81,12 +81,35 @@ export const config = {
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
 };
 
+// Secrets that must never fall back to a published default value.
+const INSECURE_DEFAULTS = [
+  'default-access-secret-change-in-production',
+  'default-refresh-secret-change-in-production',
+];
+
 // Validate required configuration
 export const validateConfig = (): void => {
-  const required = ['MONGODB_URI'];
+  const required = ['MONGODB_URI', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'];
   const missing = required.filter((key) => !process.env[key]);
 
-  if (missing.length > 0 && config.isProd) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  if (missing.length > 0) {
+    const message = `Missing required environment variables: ${missing.join(', ')}`;
+    // In production this is fatal — booting with the hardcoded fallback secrets
+    // would let anyone forge a valid token for any user.
+    if (config.isProd) throw new Error(message);
+    console.warn(`⚠️  ${message} — using insecure development defaults. Set these before deploying.`);
+  }
+
+  // Never allow the shipped placeholder secrets outside local development.
+  if (config.isProd) {
+    if (INSECURE_DEFAULTS.includes(config.jwt.accessSecret) || INSECURE_DEFAULTS.includes(config.jwt.refreshSecret)) {
+      throw new Error('Refusing to start: JWT secrets are still set to the default placeholder values.');
+    }
+    if (config.jwt.accessSecret === config.jwt.refreshSecret) {
+      throw new Error('Refusing to start: JWT access and refresh secrets must be different.');
+    }
+    if (config.jwt.accessSecret.length < 32 || config.jwt.refreshSecret.length < 32) {
+      throw new Error('Refusing to start: JWT secrets must be at least 32 characters.');
+    }
   }
 };

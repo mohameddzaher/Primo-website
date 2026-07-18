@@ -26,11 +26,17 @@ const defaultSettings = {
 
   // Payment
   enableTax: true,
-  taxRate: 14,
+  taxRate: 15,
   taxLabel: 'VAT',
   enableCOD: true,
   codFee: 0,
   enableOnlinePayment: true,
+
+  // Tax / Invoicing (ZATCA e-invoicing seller identity)
+  sellerName: '',
+  sellerVatNumber: '',
+  sellerCrNumber: '',
+  sellerAddress: '',
 
   // Social Media
   socialFacebook: '',

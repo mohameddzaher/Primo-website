@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { HiOutlineSearch, HiOutlineTruck, HiOutlineCheckCircle, HiOutlineClock, HiOutlineXCircle, HiOutlineShoppingBag } from 'react-icons/hi';
+import { HiOutlineSearch, HiOutlineTruck, HiOutlineCheckCircle, HiOutlineClock, HiOutlineXCircle, HiOutlineShoppingBag, HiOutlineExternalLink } from 'react-icons/hi';
 import { Button, Input, Card, Skeleton } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { ordersApi } from '@/lib/api';
@@ -220,7 +220,67 @@ export default function TrackOrderPageContent() {
                 </div>
               )}
 
-              {order.estimatedDelivery && currentStep > 0 && currentStep < 5 && (
+              {order.shipment?.trackingNumber && (
+                <div className="mt-4 p-4 bg-beige-50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <HiOutlineTruck className="text-primary-600" size={18} />
+                    <h4 className="text-sm font-semibold text-dark-900">Shipment Details</h4>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    {order.shipment.carrier && (
+                      <div className="flex justify-between gap-3">
+                        <span className="text-dark-500">Carrier</span>
+                        <span className="font-medium text-dark-900">{order.shipment.carrier}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-3">
+                      <span className="text-dark-500">Tracking Number</span>
+                      <span className="font-medium text-dark-900 break-all text-right">
+                        {order.shipment.trackingNumber}
+                      </span>
+                    </div>
+                    {order.shipment.shippedAt && (
+                      <div className="flex justify-between gap-3">
+                        <span className="text-dark-500">Shipped On</span>
+                        <span className="font-medium text-dark-900">
+                          {new Date(order.shipment.shippedAt).toLocaleDateString('en-US', {
+                            year: 'numeric', month: 'long', day: 'numeric',
+                          })}
+                        </span>
+                      </div>
+                    )}
+                    {order.shipment.estimatedDelivery && (
+                      <div className="flex justify-between gap-3">
+                        <span className="text-dark-500">Estimated Delivery</span>
+                        <span className="font-medium text-dark-900">
+                          {new Date(order.shipment.estimatedDelivery).toLocaleDateString('en-US', {
+                            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                          })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {order.shipment.trackingUrl && (
+                    <a
+                      href={order.shipment.trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block mt-3"
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        rightIcon={<HiOutlineExternalLink size={16} />}
+                      >
+                        Track Shipment
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {order.estimatedDelivery && !order.shipment?.estimatedDelivery && currentStep > 0 && currentStep < 5 && (
                 <div className="mt-4 p-3 bg-beige-50 rounded-lg text-sm">
                   <span className="text-dark-500">Estimated Delivery: </span>
                   <span className="font-medium text-dark-900">

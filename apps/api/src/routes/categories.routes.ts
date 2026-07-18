@@ -10,13 +10,18 @@ import { Product } from '../models/Product';
 import { AuditLog } from '../models/AuditLog';
 import { authenticate, requireAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
 const router = Router();
 
+// Any category create/update/delete clears the cached category + product lists
+router.use(invalidateOnWrite('categories', 'products'));
+
 // Get all categories (public)
 router.get(
   '/',
+  cacheResponse('categories', 120),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { flat } = req.query;
 

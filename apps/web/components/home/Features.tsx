@@ -1,22 +1,32 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
-import { cmsApi } from '@/lib/api';
-
-const defaultFeatures = [
-  { icon: '🚚', title: 'Free Shipping', description: 'On orders over EGP 2,000' },
-  { icon: '🛡️', title: '2 Year Warranty', description: 'Full coverage guarantee' },
-  { icon: '↩️', title: 'Easy Returns', description: '30-day return policy' },
-  { icon: '💬', title: '24/7 Support', description: 'Expert assistance anytime' },
-];
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/utils';
 
 export function Features() {
-  const { data: cmsData } = useQuery({
-    queryKey: ['cms-homepage-features'],
-    queryFn: () => cmsApi.getContent('homepage_features'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: cmsData } = useCmsContent('homepage_features');
+  const { settings } = useSettings();
+
+  // Threshold, VAT rate and label all come from store settings — never hardcoded.
+  const defaultFeatures = [
+    {
+      icon: '🚚',
+      title: 'Free Delivery',
+      description: settings.enableFreeShipping
+        ? `On orders over ${formatCurrency(settings.freeShippingThreshold, settings.currency)}`
+        : 'Fast nationwide delivery',
+    },
+    {
+      icon: '🧾',
+      title: `${settings.taxRate}% ${settings.taxLabel} Included`,
+      description: 'Prices shown are final — no surprises',
+    },
+    { icon: '🛡️', title: 'Authorized Dealer', description: 'Genuine products with official warranty' },
+    { icon: '🔒', title: 'Secure Payment', description: 'Mada, Visa, Apple Pay & cash on delivery' },
+    { icon: '↩️', title: 'Easy Returns', description: '30-day hassle-free returns' },
+  ];
 
   let features = defaultFeatures;
   try {
@@ -31,7 +41,11 @@ export function Features() {
   return (
     <section className="py-12 border-y border-beige-200 bg-white">
       <div className="container-custom">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+        <div
+          className={`grid grid-cols-2 gap-6 lg:gap-8 ${
+            features.length % 5 === 0 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+          }`}
+        >
           {features.map((feature: any, index: number) => (
             <motion.div
               key={feature.title}

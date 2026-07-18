@@ -211,10 +211,10 @@ export default function AdminProductsPage() {
                       {product.discount && product.discount > 0 ? (
                         <div>
                           <span className="font-medium text-green-700">
-                            EGP {(product.finalPrice ?? (product.price * (1 - product.discount / 100))).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            SAR {(product.finalPrice ?? (product.price * (1 - product.discount / 100))).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </span>
                           <span className="text-xs text-dark-400 line-through ml-1">
-                            EGP {product.price.toLocaleString()}
+                            SAR {product.price.toLocaleString()}
                           </span>
                           <span className="ml-1 text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-medium">
                             -{product.discount}%
@@ -222,7 +222,7 @@ export default function AdminProductsPage() {
                         </div>
                       ) : (
                         <span className="font-medium text-dark-900">
-                          EGP {product.price.toLocaleString()}
+                          SAR {product.price.toLocaleString()}
                         </span>
                       )}
                     </td>

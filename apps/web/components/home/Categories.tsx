@@ -8,6 +8,7 @@ import { categoriesApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-client';
 import { Skeleton } from '@/components/ui';
 import { getImageUrl } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 
 // Smart emoji fallback based on category name keywords
 function getCategoryIcon(name: string): string {
@@ -35,6 +36,7 @@ function getCategoryIcon(name: string): string {
 }
 
 export function Categories() {
+  const t = useT();
   const { data: categories, isLoading } = useQuery({
     queryKey: queryKeys.categories.list(),
     queryFn: categoriesApi.getAll,
@@ -64,7 +66,7 @@ export function Categories() {
             viewport={{ once: true }}
             className="text-xs text-primary-600 font-medium uppercase tracking-wider"
           >
-            Shop by Category
+            {t('home.shopByCategory')}
           </motion.span>
           <motion.h2
             initial={{ opacity: 0, y: 10 }}
@@ -73,15 +75,15 @@ export function Categories() {
             transition={{ delay: 0.1 }}
             className="mt-2 text-2xl md:text-3xl font-display font-semibold text-dark-900"
           >
-            Browse Our Collections
+            {t('home.browseCollections')}
           </motion.h2>
         </div>
 
         {/* Categories Grid */}
         {isLoading ? (
           <div className="flex flex-wrap justify-center gap-2 md:gap-3">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="w-[calc(33.333%-6px)] sm:w-[calc(25%-6px)] md:w-[calc(16.666%-8px)]">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <div key={i} className="w-[calc(25%-6px)] sm:w-[calc(20%-7px)] md:w-[calc(12.5%-11px)] max-w-[130px]">
                 <Skeleton variant="rounded" className="aspect-square" />
               </div>
             ))}
@@ -98,7 +100,7 @@ export function Categories() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.05 }}
-                  className="w-[calc(33.333%-6px)] sm:w-[calc(25%-6px)] md:w-[calc(16.666%-8px)]"
+                  className="w-[calc(25%-6px)] sm:w-[calc(20%-7px)] md:w-[calc(12.5%-11px)] max-w-[130px]"
                 >
                   <Link href={`/products?category=${category._id}`} className="group block">
                     {imageUrl ? (
@@ -112,13 +114,13 @@ export function Categories() {
                           sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, 16vw"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-dark-900/70 via-dark-900/10 to-transparent" />
-                        <div className="absolute bottom-0 left-0 right-0 p-2">
+                        <div className="absolute bottom-0 inset-x-0 p-2">
                           <h3 className="text-[10px] sm:text-xs font-semibold text-white text-center line-clamp-2 leading-tight drop-shadow">
                             {category.name}
                           </h3>
                           {category.productCount !== undefined && (
                             <p className="text-[9px] sm:text-[10px] text-white/80 text-center">
-                              {category.productCount} items
+                              {t('home.items', { count: category.productCount })}
                             </p>
                           )}
                         </div>
@@ -134,7 +136,7 @@ export function Categories() {
                         </h3>
                         {category.productCount !== undefined && (
                           <p className="text-[9px] sm:text-[10px] text-dark-400">
-                            {category.productCount} items
+                            {t('home.items', { count: category.productCount })}
                           </p>
                         )}
                       </div>

@@ -13,8 +13,25 @@ import {
 } from 'react-icons/hi';
 import { Button, Card, Select, Textarea } from '@/components/ui';
 import { adminApi } from '@/lib/api';
+import { useSettings } from '@/lib/settings-context';
+import { buildZatcaTlvBase64, renderQrSvg } from '@/lib/zatca-qr';
 import toast from 'react-hot-toast';
 import { useState } from 'react';
+
+/**
+ * ZATCA (Saudi tax authority) requires a tax invoice to carry the seller's
+ * legal name, address and VAT registration number.
+ *
+ * These now live in Settings > Payment > Tax / Invoicing so the store owner can
+ * maintain them. The values below are only shown when a field is still unset,
+ * and are deliberately marked so an unconfigured invoice is obviously invalid.
+ */
+const SELLER_PLACEHOLDERS = {
+  name: 'NOT SET — configure legal name in Settings',
+  address: 'NOT SET — configure registered address in Settings',
+  vatNumber: 'NOT SET — configure VAT number in Settings',
+  crNumber: 'NOT SET',
+};
 
 const statusOptions = [
   { value: 'new', label: 'New' },
@@ -41,17 +58,53 @@ export default function AdminOrderDetailPage() {
   const queryClient = useQueryClient();
   const orderId = params.id as string;
   const [note, setNote] = useState('');
+  const { settings } = useSettings();
 
   const handlePrint = () => {
     if (!order) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const itemsRows = (order.items || []).map((item: any) => {
+    // --- ZATCA tax invoice figures (presentation only, no pricing math changed) ---
+    const money = (n: number) =>
+      `SAR ${n.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const items: any[] = order.items || [];
+    const vatRate = order.taxRate ?? 15;
+    const totalVat = order.taxAmount || 0;
+    const orderDiscount = order.discount || 0;
+    const shippingCost = order.shippingCost || 0;
+    const totalIncludingVat = order.total || 0;
+    const totalExcludingVat = Math.round((totalIncludingVat - totalVat) * 100) / 100;
+
+    const lineGross = items.map((i: any) => (i.price || 0) * (i.quantity || 1));
+    const grossSum = lineGross.reduce((a: number, b: number) => a + b, 0);
+
+    // Spread the order-level discount and the order-level VAT across the lines
+    // proportionally so the per-line figures add up to the invoice totals.
+    let discountAllocated = 0;
+    let vatAllocated = 0;
+    const lineFigures = lineGross.map((gross: number, idx: number) => {
+      const isLast = idx === lineGross.length - 1;
+      const share = grossSum > 0 ? gross / grossSum : 0;
+      const lineDiscount = isLast
+        ? Math.round((orderDiscount - discountAllocated) * 100) / 100
+        : Math.round(orderDiscount * share * 100) / 100;
+      discountAllocated += lineDiscount;
+      const taxable = Math.round((gross - lineDiscount) * 100) / 100;
+      const lineVat = isLast
+        ? Math.round((totalVat - vatAllocated) * 100) / 100
+        : Math.round(totalVat * share * 100) / 100;
+      vatAllocated += lineVat;
+      return { taxable, lineVat };
+    });
+
+    const itemsRows = items.map((item: any, idx: number) => {
       const hasItemDiscount = item.discount && item.discount > 0;
       const priceCell = hasItemDiscount
-        ? `<span style="text-decoration:line-through;color:#999;font-size:12px;">EGP ${(item.originalPrice || 0).toLocaleString()}</span><br>EGP ${(item.price || 0).toLocaleString()} <span style="color:#dc2626;font-size:11px;">(-${item.discount}%)</span>`
-        : `EGP ${(item.price || 0).toLocaleString()}`;
+        ? `<span style="text-decoration:line-through;color:#999;font-size:12px;">${money(item.originalPrice || 0)}</span><br>${money(item.price || 0)} <span style="color:#dc2626;font-size:11px;">(-${item.discount}%)</span>`
+        : money(item.price || 0);
+      const fig = lineFigures[idx] || { taxable: 0, lineVat: 0 };
       return `
       <tr>
         <td style="padding:12px 8px;border-bottom:1px solid #eee;font-size:14px;color:#333;">
@@ -60,12 +113,39 @@ export default function AdminOrderDetailPage() {
         </td>
         <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:center;font-size:14px;color:#333;">${item.quantity}</td>
         <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;font-size:14px;color:#333;">${priceCell}</td>
-        <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;font-size:14px;font-weight:600;color:#333;">EGP ${((item.price || 0) * (item.quantity || 1)).toLocaleString()}</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;font-size:14px;color:#333;">${money(fig.taxable)}</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:center;font-size:14px;color:#333;">${vatRate}%</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;font-size:14px;color:#333;">${money(fig.lineVat)}</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;font-size:14px;font-weight:600;color:#333;">${money(fig.taxable + fig.lineVat)}</td>
       </tr>`;
     }).join('');
 
+    const sellerName = settings.sellerName || settings.siteName || SELLER_PLACEHOLDERS.name;
+    const sellerAddress =
+      settings.sellerAddress || settings.siteAddress || SELLER_PLACEHOLDERS.address;
+    const sellerVatNumber = settings.sellerVatNumber || SELLER_PLACEHOLDERS.vatNumber;
+    const sellerCrNumber = settings.sellerCrNumber || SELLER_PLACEHOLDERS.crNumber;
+
     const addr = order.shippingAddress || {};
-    const orderDate = new Date(order.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const issuedAt = new Date(order.createdAt);
+
+    // --- ZATCA Phase 2 QR: Base64(TLV) rendered as an inline (CSP-safe) SVG ---
+    const zatcaBase64 = buildZatcaTlvBase64({
+      sellerName,
+      sellerVatNumber,
+      // ISO 8601 UTC, seconds precision (e.g. 2026-07-18T20:30:00Z)
+      timestamp: issuedAt.toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      totalWithVat: totalIncludingVat.toFixed(2),
+      vatTotal: totalVat.toFixed(2),
+    });
+    let zatcaQr = '';
+    try {
+      zatcaQr = renderQrSvg(zatcaBase64);
+    } catch {
+      zatcaQr = '';
+    }
+    const orderDate = issuedAt.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+    const orderTime = issuedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     const paymentMethodLabel =
       order.paymentMethod === 'cash_on_delivery' ? 'Cash on Delivery'
         : order.paymentMethod === 'card' ? 'Credit/Debit Card'
@@ -76,7 +156,7 @@ export default function AdminOrderDetailPage() {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>PRIMO Invoice - ${order.orderNumber}</title>
+  <title>Tax Invoice ${order.orderNumber} - ${sellerName}</title>
   <style>
     @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin:0; padding:0; background:#f5f5f0; color:#333; }
@@ -95,10 +175,17 @@ export default function AdminOrderDetailPage() {
     table { width:100%; border-collapse:collapse; margin-bottom:24px; }
     thead th { background:#f8f7f4; padding:12px 8px; font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:#666; font-weight:600; border-bottom:2px solid #e5e2db; }
     .summary { display:flex; justify-content:flex-end; }
-    .summary-table { width:280px; }
+    .summary-table { width:320px; }
+    .summary-row.subtotal-excl { border-top:1px solid #e5e2db; margin-top:8px; padding-top:10px; font-weight:600; color:#333; }
+    .arabic { font-family:'Segoe UI', Tahoma, Arial, sans-serif; direction:rtl; unicode-bidi:isolate; }
+    .seller-vat { display:inline-block; margin-top:6px; padding:3px 10px; border:1px solid #c9a96e; border-radius:4px; font-size:13px; font-weight:600; color:#1a1a2e; }
     .summary-row { display:flex; justify-content:space-between; padding:8px 0; font-size:14px; color:#555; }
     .summary-row.total { border-top:2px solid #1a1a2e; margin-top:8px; padding-top:12px; font-size:18px; font-weight:700; color:#1a1a2e; }
     .summary-row.discount { color:#16a34a; }
+    .zatca { display:flex; align-items:center; gap:16px; margin-top:28px; padding-top:20px; border-top:1px solid #e5e2db; }
+    .zatca-label { font-size:12px; color:#888; line-height:1.6; }
+    .zatca-label strong { display:block; color:#333; font-size:13px; margin-bottom:2px; }
+    .zatca-payload { margin:6px 0 0; font-family:'Courier New', Courier, monospace; font-size:10px; color:#aaa; word-break:break-all; max-width:420px; }
     .footer { background:#f8f7f4; padding:24px 40px; text-align:center; border-top:1px solid #e5e2db; }
     .footer p { margin:4px 0; font-size:13px; color:#888; }
     .badge { display:inline-block; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:600; }
@@ -114,15 +201,25 @@ export default function AdminOrderDetailPage() {
         <p style="margin:4px 0 0;opacity:0.7;font-size:13px;">Premium Shopping Experience</p>
       </div>
       <div class="invoice-title">
-        <h2>INVOICE</h2>
-        <p>#${order.orderNumber}</p>
-        <p>${orderDate}</p>
+        <h2>Tax Invoice</h2>
+        <h2 class="arabic" style="font-size:20px;">فاتورة ضريبية</h2>
+        <p>Invoice No: ${order.orderNumber}</p>
+        <p>Issued: ${orderDate} ${orderTime}</p>
       </div>
     </div>
     <div class="body">
       <div class="info-row">
         <div class="info-block" style="flex:1;">
-          <h4>Bill To</h4>
+          <h4>Seller / البائع</h4>
+          <p class="name">${sellerName}</p>
+          <p>${sellerAddress}</p>
+          ${settings.sitePhone ? `<p>${settings.sitePhone}</p>` : ''}
+          ${settings.siteEmail ? `<p>${settings.siteEmail}</p>` : ''}
+          <p class="seller-vat">VAT Reg. No. / الرقم الضريبي: ${sellerVatNumber}</p>
+          <p style="font-size:12px;color:#888;">CR No.: ${sellerCrNumber}</p>
+        </div>
+        <div class="info-block" style="flex:1;">
+          <h4>Buyer / المشتري</h4>
           <p class="name">${addr.fullName || (order.userId?.firstName ? `${order.userId.firstName} ${order.userId.lastName}` : 'Customer')}</p>
           <p>${addr.fullAddress || ''}</p>
           <p>${addr.area ? addr.area + ', ' : ''}${addr.city || ''}</p>
@@ -144,7 +241,10 @@ export default function AdminOrderDetailPage() {
             <th style="text-align:left;">Item</th>
             <th style="text-align:center;">Qty</th>
             <th style="text-align:right;">Unit Price</th>
-            <th style="text-align:right;">Total</th>
+            <th style="text-align:right;">Taxable Amount</th>
+            <th style="text-align:center;">VAT Rate</th>
+            <th style="text-align:right;">VAT Amount</th>
+            <th style="text-align:right;">Total Incl. VAT</th>
           </tr>
         </thead>
         <tbody>
@@ -154,19 +254,30 @@ export default function AdminOrderDetailPage() {
 
       <div class="summary">
         <div class="summary-table">
-          <div class="summary-row"><span>Subtotal</span><span>EGP ${(order.subtotal || 0).toLocaleString()}</span></div>
-          ${order.discount > 0 ? `<div class="summary-row discount"><span>Discount${order.discountCode ? ` (${order.discountCode})` : ''}</span><span>-EGP ${order.discount.toLocaleString()}</span></div>` : ''}
-          <div class="summary-row"><span>Shipping</span><span>${order.shippingCost === 0 ? 'Free' : 'EGP ' + (order.shippingCost || 0).toLocaleString()}</span></div>
-          ${order.taxAmount > 0 ? `<div class="summary-row"><span>${order.taxLabel || 'VAT'} (${order.taxRate}%)</span><span>EGP ${order.taxAmount.toLocaleString()}</span></div>` : ''}
-          <div class="summary-row total"><span>Total</span><span>EGP ${(order.total || 0).toLocaleString()}</span></div>
-          ${order.taxAmount > 0 ? `<div style="text-align:right;font-size:11px;color:#888;margin-top:4px;">Includes ${order.taxLabel || 'VAT'} (${order.taxRate}%): EGP ${order.taxAmount.toLocaleString()}</div>` : ''}
+          <div class="summary-row"><span>Subtotal</span><span>${money(order.subtotal || 0)}</span></div>
+          ${orderDiscount > 0 ? `<div class="summary-row discount"><span>Discount${order.discountCode ? ` (${order.discountCode})` : ''}</span><span>-${money(orderDiscount)}</span></div>` : ''}
+          <div class="summary-row"><span>Shipping</span><span>${shippingCost === 0 ? 'Free' : money(shippingCost)}</span></div>
+          <div class="summary-row subtotal-excl"><span>Total excluding VAT<br><span class="arabic" style="font-size:11px;color:#888;">الإجمالي غير شامل الضريبة</span></span><span>${money(totalExcludingVat)}</span></div>
+          <div class="summary-row"><span>Total VAT (${vatRate}%)<br><span class="arabic" style="font-size:11px;color:#888;">مجموع ضريبة القيمة المضافة</span></span><span>${money(totalVat)}</span></div>
+          <div class="summary-row total"><span>Total including VAT<br><span class="arabic" style="font-size:11px;color:#888;font-weight:400;">الإجمالي شامل الضريبة</span></span><span>${money(totalIncludingVat)}</span></div>
+        </div>
+      </div>
+
+      <div class="zatca">
+        ${zatcaQr}
+        <div class="zatca-label">
+          <strong>ZATCA e-invoice QR / رمز الفاتورة الضريبية</strong>
+          Scan to verify the seller name, VAT registration number, invoice timestamp,
+          total including VAT and VAT amount.
+          ${zatcaQr ? '' : `<p class="zatca-payload">${zatcaBase64}</p>`}
         </div>
       </div>
     </div>
     <div class="footer">
-      <p style="font-weight:600;color:#666;">Thank you for shopping with PRIMO!</p>
-      <p>For questions about your order, contact us at support@primoshops.com</p>
-      <p style="margin-top:8px;font-size:11px;color:#aaa;">This is a computer-generated invoice and does not require a signature.</p>
+      <p style="font-weight:600;color:#666;">Thank you for shopping with ${sellerName}!</p>
+      <p>For questions about your order, contact us at ${settings.siteEmail || 'support@primoshops.com'}</p>
+      <p style="margin-top:8px;font-size:11px;color:#aaa;">Tax invoice issued under VAT registration ${sellerVatNumber} in accordance with the KSA VAT Law.</p>
+      <p style="font-size:11px;color:#aaa;">This is a computer-generated invoice and does not require a signature.</p>
     </div>
   </div>
   <script>window.onload = function() { window.print(); }</script>
@@ -301,24 +412,24 @@ export default function AdminOrderDetailPage() {
                       Qty: {item.quantity} ×{' '}
                       {item.discount && item.discount > 0 ? (
                         <>
-                          <span className="line-through text-dark-400">EGP {item.originalPrice?.toLocaleString()}</span>
+                          <span className="line-through text-dark-400">SAR {item.originalPrice?.toLocaleString()}</span>
                           {' '}
-                          <span className="text-green-700 font-medium">EGP {item.price?.toLocaleString()}</span>
+                          <span className="text-green-700 font-medium">SAR {item.price?.toLocaleString()}</span>
                           {' '}
                           <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-medium">-{item.discount}%</span>
                         </>
                       ) : (
-                        <span>EGP {item.price?.toLocaleString()}</span>
+                        <span>SAR {item.price?.toLocaleString()}</span>
                       )}
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-dark-900">
-                      EGP {((item.price || 0) * (item.quantity || 1)).toLocaleString()}
+                      SAR {((item.price || 0) * (item.quantity || 1)).toLocaleString()}
                     </p>
                     {item.discount && item.discount > 0 && (
                       <p className="text-xs text-green-600">
-                        Saved EGP {(((item.originalPrice || 0) - (item.price || 0)) * (item.quantity || 1)).toLocaleString()}
+                        Saved SAR {(((item.originalPrice || 0) - (item.price || 0)) * (item.quantity || 1)).toLocaleString()}
                       </p>
                     )}
                   </div>
@@ -330,33 +441,33 @@ export default function AdminOrderDetailPage() {
             <div className="mt-6 pt-6 border-t border-beige-200 space-y-2">
               <div className="flex justify-between text-dark-600">
                 <span>Subtotal</span>
-                <span>EGP {order.subtotal?.toLocaleString()}</span>
+                <span>SAR {order.subtotal?.toLocaleString()}</span>
               </div>
               {order.discount > 0 && (
                 <div className="flex justify-between text-success-600">
                   <span>Discount{order.discountCode ? ` (${order.discountCode})` : ''}</span>
-                  <span>-EGP {order.discount?.toLocaleString()}</span>
+                  <span>-SAR {order.discount?.toLocaleString()}</span>
                 </div>
               )}
               <div className="flex justify-between text-dark-600">
                 <span>Shipping</span>
                 <span>
-                  {order.shippingCost === 0 ? 'Free' : `EGP ${order.shippingCost?.toLocaleString()}`}
+                  {order.shippingCost === 0 ? 'Free' : `SAR ${order.shippingCost?.toLocaleString()}`}
                 </span>
               </div>
               {order.taxAmount > 0 && (
                 <div className="flex justify-between text-dark-600">
                   <span>{order.taxLabel || 'VAT'} ({order.taxRate}%)</span>
-                  <span>EGP {order.taxAmount?.toLocaleString()}</span>
+                  <span>SAR {order.taxAmount?.toLocaleString()}</span>
                 </div>
               )}
               <div className="flex justify-between text-lg font-semibold text-dark-900 pt-2 border-t border-beige-200">
                 <span>Total</span>
-                <span>EGP {order.total?.toLocaleString()}</span>
+                <span>SAR {order.total?.toLocaleString()}</span>
               </div>
               {order.taxAmount > 0 && (
                 <p className="text-xs text-dark-400">
-                  Includes {order.taxLabel || 'VAT'} ({order.taxRate}%): EGP {order.taxAmount?.toLocaleString()}
+                  Includes {order.taxLabel || 'VAT'} ({order.taxRate}%): SAR {order.taxAmount?.toLocaleString()}
                 </p>
               )}
             </div>

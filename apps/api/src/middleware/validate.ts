@@ -138,6 +138,39 @@ export const sanitizeObject = (obj: any): any => {
   return obj;
 };
 
+/**
+ * Strip MongoDB query operators from user input.
+ *
+ * Without this, a JSON body like `{"email": {"$ne": null}}` is passed straight
+ * into a Mongoose query and matches an arbitrary document — enough to bypass
+ * lookups or mass-select records on any endpoint that isn't zod-validated.
+ * We delete keys starting with `$` and keys containing `.` (dotted paths),
+ * mutating in place so `req.query` (a getter in some Express versions) is safe.
+ */
+function stripMongoOperators(obj: any, depth = 0): void {
+  if (!obj || typeof obj !== 'object' || depth > 10) return;
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) stripMongoOperators(item, depth + 1);
+    return;
+  }
+
+  for (const key of Object.keys(obj)) {
+    if (key.startsWith('$') || key.includes('.')) {
+      delete obj[key];
+      continue;
+    }
+    stripMongoOperators(obj[key], depth + 1);
+  }
+}
+
+export const mongoSanitize = (req: Request, _res: Response, next: NextFunction): void => {
+  stripMongoOperators(req.body);
+  stripMongoOperators(req.query);
+  stripMongoOperators(req.params);
+  next();
+};
+
 // Sanitization middleware
 export const sanitize = (req: Request, _res: Response, next: NextFunction): void => {
   if (req.body) {

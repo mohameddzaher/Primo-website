@@ -41,6 +41,11 @@ export interface ISettings extends Document {
   paypalEnabled: boolean;
   paypalClientId: string;
   paypalSecret: string;
+  // Tax / Invoicing (ZATCA e-invoicing seller identity)
+  sellerName: string;
+  sellerVatNumber: string;
+  sellerCrNumber: string;
+  sellerAddress: string;
   // Email
   smtpHost: string;
   smtpPort: number;
@@ -222,6 +227,23 @@ const settingsSchema = new Schema<ISettings>(
       default: '',
     },
     paypalSecret: {
+      type: String,
+      default: '',
+    },
+    // Tax / Invoicing (ZATCA e-invoicing seller identity)
+    sellerName: {
+      type: String,
+      default: '',
+    },
+    sellerVatNumber: {
+      type: String,
+      default: '',
+    },
+    sellerCrNumber: {
+      type: String,
+      default: '',
+    },
+    sellerAddress: {
       type: String,
       default: '',
     },

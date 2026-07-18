@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiStar, HiOutlinePencilAlt, HiX, HiChevronRight } from 'react-icons/hi';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,16 +12,20 @@ import { testimonialsApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { Button, Input, Textarea } from '@/components/ui';
 import toast from 'react-hot-toast';
+import { useI18n, type TranslationKey } from '@/lib/i18n';
 
-const testimonialSchema = z.object({
-  customerName: z.string().min(2, 'Name must be at least 2 characters'),
-  customerEmail: z.string().email('Please enter a valid email'),
-  rating: z.number().min(1).max(5),
-  title: z.string().optional(),
-  content: z.string().min(10, 'Please write at least 10 characters'),
-});
+// Built per-render so validation messages follow the active locale.
+function buildTestimonialSchema(t: (key: TranslationKey) => string) {
+  return z.object({
+    customerName: z.string().min(2, t('home.validationName')),
+    customerEmail: z.string().email(t('home.validationEmail')),
+    rating: z.number().min(1).max(5),
+    title: z.string().optional(),
+    content: z.string().min(10, t('home.validationContent')),
+  });
+}
 
-type TestimonialForm = z.infer<typeof testimonialSchema>;
+type TestimonialForm = z.infer<ReturnType<typeof buildTestimonialSchema>>;
 
 interface Testimonial {
   _id: string;
@@ -34,6 +38,8 @@ interface Testimonial {
 }
 
 function TestimonialCard({ testimonial }: { testimonial: Testimonial }) {
+  const { intlLocale } = useI18n();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -87,7 +93,7 @@ function TestimonialCard({ testimonial }: { testimonial: Testimonial }) {
       {/* Date */}
       {testimonial.createdAt && (
         <p className="text-[10px] text-dark-400 mt-2">
-          {new Date(testimonial.createdAt).toLocaleDateString('en-US', {
+          {new Date(testimonial.createdAt).toLocaleDateString(intlLocale, {
             month: 'short',
             day: 'numeric',
             year: 'numeric',
@@ -118,6 +124,8 @@ function TestimonialSkeleton() {
 }
 
 export function Testimonials() {
+  const { t } = useI18n();
+  const testimonialSchema = useMemo(() => buildTestimonialSchema(t), [t]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRating, setSelectedRating] = useState(5);
   const queryClient = useQueryClient();
@@ -133,12 +141,12 @@ export function Testimonials() {
     mutationFn: (data: TestimonialForm) => testimonialsApi.submit(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['testimonials-approved'] });
-      toast.success('Thank you for your testimonial! It will be reviewed shortly.');
+      toast.success(t('home.testimonialSuccess'));
       setIsFormOpen(false);
       reset();
     },
     onError: () => {
-      toast.error('Failed to submit testimonial. Please try again.');
+      toast.error(t('home.testimonialError'));
     },
   });
 
@@ -180,7 +188,7 @@ export function Testimonials() {
               viewport={{ once: true }}
               className="text-xs text-primary-600 font-medium uppercase tracking-wider"
             >
-              Customer Reviews
+              {t('home.customerReviews')}
             </motion.span>
             <motion.h2
               initial={{ opacity: 0, y: 10 }}
@@ -189,7 +197,7 @@ export function Testimonials() {
               transition={{ delay: 0.1 }}
               className="mt-1 text-2xl md:text-3xl font-display font-semibold text-dark-900"
             >
-              What Our Customers Say
+              {t('home.whatCustomersSay')}
             </motion.h2>
           </div>
 
@@ -206,7 +214,7 @@ export function Testimonials() {
               leftIcon={<HiOutlinePencilAlt size={14} />}
               onClick={() => setIsFormOpen(true)}
             >
-              Write a Review
+              {t('product.writeReview')}
             </Button>
           </motion.div>
         </div>
@@ -235,11 +243,11 @@ export function Testimonials() {
                 className="mt-6 text-center"
               >
                 <Link
-                  href="/reviews"
+                  href="/products?sort=rating"
                   className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
                 >
-                  View all {testimonials.length} reviews
-                  <HiChevronRight size={16} />
+                  {t('home.shopTopRated')}
+                  <HiChevronRight size={16} className="rtl-flip" />
                 </Link>
               </motion.div>
             )}
@@ -252,16 +260,16 @@ export function Testimonials() {
             className="text-center py-12 bg-white rounded-xl"
           >
             <div className="text-4xl mb-3">💬</div>
-            <h3 className="text-lg font-semibold text-dark-900 mb-2">No Reviews Yet</h3>
+            <h3 className="text-lg font-semibold text-dark-900 mb-2">{t('home.noReviewsYet')}</h3>
             <p className="text-sm text-dark-500 mb-4">
-              Be the first to share your experience with PRIMO!
+              {t('home.beTheFirstReview')}
             </p>
             <Button
               variant="primary"
               leftIcon={<HiOutlinePencilAlt size={16} />}
               onClick={() => setIsFormOpen(true)}
             >
-              Write the First Review
+              {t('home.writeFirstReview')}
             </Button>
           </motion.div>
         )}
@@ -276,28 +284,28 @@ export function Testimonials() {
             className="mt-8 grid grid-cols-4 gap-3 text-center"
           >
             <div className="p-3 bg-white rounded-lg">
-              <div className="text-xl md:text-2xl font-bold text-primary-600">
+              <div className="text-xl md:text-2xl font-bold text-primary-600 ltr-nums">
                 {testimonials.length}+
               </div>
-              <div className="text-[10px] md:text-xs text-dark-500">Reviews</div>
+              <div className="text-[10px] md:text-xs text-dark-500">{t('home.statReviews')}</div>
             </div>
             <div className="p-3 bg-white rounded-lg">
-              <div className="text-xl md:text-2xl font-bold text-primary-600">
-                {(testimonials.reduce((acc: number, t: Testimonial) => acc + t.rating, 0) / testimonials.length).toFixed(1)}
+              <div className="text-xl md:text-2xl font-bold text-primary-600 ltr-nums">
+                {(testimonials.reduce((acc: number, item: Testimonial) => acc + item.rating, 0) / testimonials.length).toFixed(1)}
               </div>
-              <div className="text-[10px] md:text-xs text-dark-500">Avg Rating</div>
+              <div className="text-[10px] md:text-xs text-dark-500">{t('home.statAvgRating')}</div>
             </div>
             <div className="p-3 bg-white rounded-lg">
-              <div className="text-xl md:text-2xl font-bold text-primary-600">
-                {Math.round((testimonials.filter((t: Testimonial) => t.rating >= 4).length / testimonials.length) * 100)}%
+              <div className="text-xl md:text-2xl font-bold text-primary-600 ltr-nums">
+                {Math.round((testimonials.filter((item: Testimonial) => item.rating >= 4).length / testimonials.length) * 100)}%
               </div>
-              <div className="text-[10px] md:text-xs text-dark-500">Satisfied</div>
+              <div className="text-[10px] md:text-xs text-dark-500">{t('home.statSatisfied')}</div>
             </div>
             <div className="p-3 bg-white rounded-lg">
-              <div className="text-xl md:text-2xl font-bold text-primary-600">
-                {testimonials.filter((t: Testimonial) => t.rating === 5).length}
+              <div className="text-xl md:text-2xl font-bold text-primary-600 ltr-nums">
+                {testimonials.filter((item: Testimonial) => item.rating === 5).length}
               </div>
-              <div className="text-[10px] md:text-xs text-dark-500">5-Star</div>
+              <div className="text-[10px] md:text-xs text-dark-500">{t('home.statFiveStar')}</div>
             </div>
           </motion.div>
         )}
@@ -322,13 +330,13 @@ export function Testimonials() {
             >
               <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-dark-900">Share Your Experience</h3>
+                  <h3 className="text-lg font-semibold text-dark-900">{t('home.shareYourExperience')}</h3>
                   <button
                     type="button"
                     onClick={() => setIsFormOpen(false)}
                     className="p-1.5 text-dark-400 hover:text-dark-600 transition-colors rounded-full hover:bg-beige-100"
-                    title="Close"
-                    aria-label="Close form"
+                    title={t('common.close')}
+                    aria-label={t('home.closeForm')}
                   >
                     <HiX size={18} />
                   </button>
@@ -338,15 +346,15 @@ export function Testimonials() {
                   {!isAuthenticated && (
                     <>
                       <Input
-                        label="Your Name"
-                        placeholder="Enter your name"
+                        label={t('home.yourName')}
+                        placeholder={t('home.yourNamePlaceholder')}
                         error={errors.customerName?.message}
                         {...register('customerName')}
                       />
                       <Input
-                        label="Email Address"
+                        label={t('home.emailAddress')}
                         type="email"
-                        placeholder="Enter your email"
+                        placeholder={t('home.emailPlaceholder')}
                         error={errors.customerEmail?.message}
                         {...register('customerEmail')}
                       />
@@ -355,7 +363,7 @@ export function Testimonials() {
 
                   <div>
                     <label className="block text-sm font-medium text-dark-700 mb-1.5">
-                      Your Rating
+                      {t('home.yourRating')}
                     </label>
                     <div className="flex gap-1">
                       {[1, 2, 3, 4, 5].map((rating) => (
@@ -364,8 +372,8 @@ export function Testimonials() {
                           type="button"
                           onClick={() => handleRatingClick(rating)}
                           className="p-0.5 transition-transform hover:scale-110"
-                          title={`Rate ${rating} star${rating > 1 ? 's' : ''}`}
-                          aria-label={`Rate ${rating} star${rating > 1 ? 's' : ''}`}
+                          title={t('home.rateStars', { count: rating })}
+                          aria-label={t('home.rateStars', { count: rating })}
                         >
                           <HiStar
                             size={24}
@@ -377,14 +385,14 @@ export function Testimonials() {
                   </div>
 
                   <Input
-                    label="Title (Optional)"
-                    placeholder="e.g., Great shopping experience!"
+                    label={t('home.reviewTitleLabel')}
+                    placeholder={t('home.reviewTitlePlaceholder')}
                     {...register('title')}
                   />
 
                   <Textarea
-                    label="Your Review"
-                    placeholder="Tell us about your experience with PRIMO..."
+                    label={t('home.yourReview')}
+                    placeholder={t('home.yourReviewPlaceholder')}
                     rows={3}
                     error={errors.content?.message}
                     {...register('content')}
@@ -397,10 +405,10 @@ export function Testimonials() {
                       fullWidth
                       onClick={() => setIsFormOpen(false)}
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </Button>
                     <Button type="submit" fullWidth isLoading={submitMutation.isPending}>
-                      Submit
+                      {t('common.submit')}
                     </Button>
                   </div>
                 </form>

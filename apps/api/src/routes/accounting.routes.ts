@@ -7,7 +7,7 @@ import mongoose from 'mongoose';
 import { Expense } from '../models/Expense';
 import { Transaction } from '../models/Transaction';
 import { Order } from '../models/Order';
-import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { authenticate, requireAdminOnly, AuthRequest } from '../middleware/auth';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
 const router = Router();
@@ -18,7 +18,7 @@ const router = Router();
 router.get(
   '/dashboard',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { period = '30' } = req.query as any;
     const days = Number(period);
@@ -201,7 +201,7 @@ router.get(
 router.get(
   '/expenses',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { page = 1, limit = 20, category, startDate, endDate, search } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
@@ -252,7 +252,7 @@ router.get(
 router.post(
   '/expenses',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { title, amount, category, date, description, receipt, isRecurring, recurringFrequency } = req.body;
 
@@ -298,7 +298,7 @@ router.post(
 router.get(
   '/expenses/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -325,7 +325,7 @@ router.get(
 router.patch(
   '/expenses/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -387,7 +387,7 @@ router.patch(
 router.delete(
   '/expenses/:id',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -420,7 +420,7 @@ router.delete(
 router.get(
   '/transactions',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { page = 1, limit = 20, type, category, startDate, endDate } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
@@ -470,7 +470,7 @@ router.get(
 router.post(
   '/transactions',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { type, amount, category, description, reference, date } = req.body;
 
@@ -513,7 +513,7 @@ router.post(
 router.get(
   '/reports',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { period = 'monthly', year } = req.query as any;
     const reportYear = year ? Number(year) : new Date().getFullYear();
@@ -769,7 +769,7 @@ router.get(
 router.post(
   '/backfill',
   authenticate,
-  requireAdmin,
+  requireAdminOnly,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // Find all non-cancelled orders
     const orders = await Order.find({

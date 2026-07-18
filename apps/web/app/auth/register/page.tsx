@@ -19,37 +19,44 @@ import {
 import { FcGoogle } from 'react-icons/fc';
 import { Button, Input, Card, Checkbox } from '@/components/ui';
 import { authApi, setAccessToken, referralsApi } from '@/lib/api';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, syncWishlistWithServer } from '@/lib/store';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { useT } from '@/lib/i18n';
+import type { TranslationKey } from '@/lib/i18n';
 import toast from 'react-hot-toast';
 
-const registerSchema = z
-  .object({
-    name: z.string().min(2, 'Name must be at least 2 characters'),
-    email: z.string().email('Please enter a valid email'),
-    phone: z.string().optional(),
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .regex(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-        'Password must contain uppercase, lowercase, and a number'
-      ),
-    confirmPassword: z.string(),
-    referralCode: z.string().optional(),
-    acceptTerms: z.boolean().refine((val) => val, {
-      message: 'You must accept the terms and conditions',
-    }),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
-    path: ['confirmPassword'],
-  });
+type Translate = (key: TranslationKey, vars?: Record<string, string | number>) => string;
 
-type RegisterForm = z.infer<typeof registerSchema>;
+// Built per-render so validation messages follow the active locale.
+const buildRegisterSchema = (t: Translate) =>
+  z
+    .object({
+      name: z.string().min(2, t('shop.validation.nameMin')),
+      email: z.string().email(t('shop.validation.emailInvalid')),
+      phone: z.string().optional(),
+      password: z
+        .string()
+        .min(8, t('shop.validation.passwordMin'))
+        .regex(
+          /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+          t('shop.validation.passwordComplexity')
+        ),
+      confirmPassword: z.string(),
+      referralCode: z.string().optional(),
+      acceptTerms: z.boolean().refine((val) => val, {
+        message: t('shop.validation.acceptTerms'),
+      }),
+    })
+    .refine((data) => data.password === data.confirmPassword, {
+      message: t('shop.validation.passwordsMismatch'),
+      path: ['confirmPassword'],
+    });
+
+type RegisterForm = z.infer<ReturnType<typeof buildRegisterSchema>>;
 
 export default function RegisterPage() {
   const router = useRouter();
+  const t = useT();
   const searchParams = useSearchParams();
   const { setUser } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
@@ -67,7 +74,7 @@ export default function RegisterPage() {
     watch,
     formState: { errors },
   } = useForm<RegisterForm>({
-    resolver: zodResolver(registerSchema),
+    resolver: zodResolver(buildRegisterSchema(t)),
     defaultValues: {
       acceptTerms: false,
       referralCode: refCode || '',
@@ -81,7 +88,7 @@ export default function RegisterPage() {
     if (refCode) {
       setShowReferralInput(true);
       setReferralApplied(true);
-      setReferralDiscount('EGP 100');
+      setReferralDiscount('SAR 100');
     }
   }, [refCode]);
 
@@ -92,15 +99,15 @@ export default function RegisterPage() {
       const result = await referralsApi.getReferralByCode(referralCode);
       if (result.valid) {
         setReferralApplied(true);
-        setReferralDiscount('EGP 100');
-        toast.success(`Referral code applied! You will get EGP 100 off your first order.`);
+        setReferralDiscount('SAR 100');
+        toast.success(t('shop.toast.referralApplied', { amount: 'SAR 100' }));
       } else {
-        toast.error('Invalid referral code');
+        toast.error(t('shop.toast.invalidReferral'));
         setReferralApplied(false);
         setReferralDiscount(null);
       }
     } catch (error) {
-      toast.error('Invalid referral code');
+      toast.error(t('shop.toast.invalidReferral'));
       setReferralApplied(false);
       setReferralDiscount(null);
     }
@@ -118,23 +125,25 @@ export default function RegisterPage() {
       });
       setAccessToken(response.accessToken);
       setUser(response.user);
+      // Merge any guest wishlist into the new account, then reload from server
+      await syncWishlistWithServer();
 
       // If referral code was applied, show special message
       if (referralApplied) {
-        toast.success('Account created! EGP 100 discount has been added to your account.');
+        toast.success(t('shop.toast.accountCreatedReferral', { amount: 'SAR 100' }));
       } else {
-        toast.success('Account created successfully!');
+        toast.success(t('shop.toast.accountCreated'));
       }
       router.push('/');
     } catch (error: any) {
-      toast.error(getApiErrorMessage(error, 'Failed to create account'));
+      toast.error(getApiErrorMessage(error, t('shop.toast.registerFailed')));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleGoogleRegister = () => {
-    toast.error('Google signup coming soon');
+    toast.error(t('shop.toast.googleSoon'));
   };
 
   return (
@@ -153,10 +162,10 @@ export default function RegisterPage() {
               </span>
             </Link>
             <h1 className="mt-4 text-2xl font-semibold text-dark-900">
-              Create an account
+              {t('auth.signUp')}
             </h1>
             <p className="mt-2 text-sm text-dark-500">
-              Join PRIMO and start shopping
+              {t('shop.auth.registerSubtitle')}
             </p>
           </div>
 
@@ -167,7 +176,7 @@ export default function RegisterPage() {
             className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-beige-300 rounded-lg text-dark-700 font-medium hover:bg-beige-50 transition-colors"
           >
             <FcGoogle size={20} />
-            Continue with Google
+            {t('shop.auth.continueGoogle')}
           </button>
 
           {/* Divider */}
@@ -177,7 +186,7 @@ export default function RegisterPage() {
             </div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="px-2 bg-white text-dark-400">
-                or register with email
+                {t('shop.auth.orRegisterEmail')}
               </span>
             </div>
           </div>
@@ -185,15 +194,15 @@ export default function RegisterPage() {
           {/* Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Input
-              label="Full Name"
-              placeholder="John Doe"
+              label={t('checkout.fullName')}
+              placeholder={t('shop.placeholder.fullName')}
               leftIcon={<HiOutlineUser size={18} />}
               error={errors.name?.message}
               {...register('name')}
             />
 
             <Input
-              label="Email"
+              label={t('auth.email')}
               type="email"
               placeholder="you@example.com"
               leftIcon={<HiOutlineMail size={18} />}
@@ -202,27 +211,27 @@ export default function RegisterPage() {
             />
 
             <Input
-              label="Phone (Optional)"
+              label={t('shop.auth.phoneOptional')}
               type="tel"
-              placeholder="+20 123 456 7890"
+              placeholder="+966 5X XXX XXXX"
               leftIcon={<HiOutlinePhone size={18} />}
               error={errors.phone?.message}
               {...register('phone')}
             />
 
             <Input
-              label="Password"
+              label={t('auth.password')}
               type="password"
-              placeholder="Create a password"
+              placeholder={t('shop.auth.createPasswordPlaceholder')}
               leftIcon={<HiOutlineLockClosed size={18} />}
               error={errors.password?.message}
               {...register('password')}
             />
 
             <Input
-              label="Confirm Password"
+              label={t('auth.confirmPassword')}
               type="password"
-              placeholder="Confirm your password"
+              placeholder={t('shop.auth.confirmPasswordPlaceholder')}
               leftIcon={<HiOutlineLockClosed size={18} />}
               error={errors.confirmPassword?.message}
               {...register('confirmPassword')}
@@ -240,9 +249,9 @@ export default function RegisterPage() {
                     <HiOutlineCheck className="text-green-600" size={20} />
                   </div>
                   <div>
-                    <p className="font-medium text-green-800">Referral Code Applied!</p>
+                    <p className="font-medium text-green-800">{t('shop.auth.referralApplied')}</p>
                     <p className="text-sm text-green-600">
-                      You will get {referralDiscount} off your first order
+                      {t('shop.auth.referralOff', { amount: referralDiscount || '' })}
                     </p>
                   </div>
                 </div>
@@ -251,7 +260,7 @@ export default function RegisterPage() {
               <div className="space-y-2">
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Enter referral code"
+                    placeholder={t('shop.auth.referralPlaceholder')}
                     leftIcon={<HiOutlineTag size={18} />}
                     {...register('referralCode')}
                   />
@@ -261,7 +270,7 @@ export default function RegisterPage() {
                     onClick={handleApplyReferral}
                     disabled={!referralCode}
                   >
-                    Apply
+                    {t('common.apply')}
                   </Button>
                 </div>
               </div>
@@ -272,7 +281,7 @@ export default function RegisterPage() {
                 className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700"
               >
                 <HiOutlineGift size={16} />
-                Have a referral code?
+                {t('shop.auth.haveReferral')}
               </button>
             )}
 
@@ -280,19 +289,19 @@ export default function RegisterPage() {
               <Checkbox
                 label={
                   <span>
-                    I agree to the{' '}
+                    {t('shop.auth.agreePrefix')}{' '}
                     <Link
                       href="/terms"
                       className="text-primary-600 hover:text-primary-700"
                     >
-                      Terms of Service
+                      {t('footer.terms')}
                     </Link>{' '}
-                    and{' '}
+                    {t('shop.auth.and')}{' '}
                     <Link
                       href="/privacy"
                       className="text-primary-600 hover:text-primary-700"
                     >
-                      Privacy Policy
+                      {t('footer.privacyPolicy')}
                     </Link>
                   </span>
                 }
@@ -312,18 +321,18 @@ export default function RegisterPage() {
               isLoading={isLoading}
               className="mt-6"
             >
-              Create Account
+              {t('auth.signUp')}
             </Button>
           </form>
 
           {/* Footer */}
           <p className="mt-6 text-center text-sm text-dark-500">
-            Already have an account?{' '}
+            {t('auth.haveAccount')}{' '}
             <Link
               href="/auth/login"
               className="text-primary-600 hover:text-primary-700 font-medium"
             >
-              Sign in
+              {t('auth.signIn')}
             </Link>
           </p>
         </Card>

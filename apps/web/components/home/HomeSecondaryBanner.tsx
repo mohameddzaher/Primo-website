@@ -4,8 +4,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
 import { bannersApi } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 
 export function HomeSecondaryBanner() {
+  const t = useT();
   const { data: banners = [] } = useQuery({
     queryKey: ['banners-home_secondary'],
     queryFn: () => bannersApi.getByPosition('home_secondary'),
@@ -20,7 +22,7 @@ export function HomeSecondaryBanner() {
     <div className="relative w-full h-[140px] sm:h-[180px] overflow-hidden rounded-xl">
       <Image
         src={banner.image}
-        alt={banner.title || 'Promotion'}
+        alt={banner.title || t('home.promotionAlt')}
         fill
         className="object-cover"
         sizes="100vw"

@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { HiArrowRight } from 'react-icons/hi';
-import { productsApi, cmsApi } from '@/lib/api';
+import { productsApi } from '@/lib/api';
 import { ProductCard } from '@/components/product/ProductCard';
 import { ProductGridSkeleton } from '@/components/ui';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
   try {
@@ -35,6 +37,8 @@ interface HomeProductSectionProps {
   limit?: number;
   /** If true, hides the section when no products have a rating > 0 */
   requireRatings?: boolean;
+  /** If true, hides the section when nothing has actually sold yet */
+  requireSoldCount?: boolean;
   /** CMS tab id to check enabled state from homepage_tabbed_products config */
   tabId?: string;
 }
@@ -49,14 +53,13 @@ export function HomeProductSection({
   dark = false,
   limit = 8,
   requireRatings = false,
+  requireSoldCount = false,
   tabId,
 }: HomeProductSectionProps) {
+  const t = useT();
+
   // Read the tabbed products config to check if this section is enabled
-  const { data: tabsCms } = useQuery({
-    queryKey: ['cms-homepage_tabbed_products'],
-    queryFn: () => cmsApi.getContent('homepage_tabbed_products'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: tabsCms } = useCmsContent('homepage_tabbed_products');
 
   const { data: result, isLoading } = useQuery({
     queryKey: [queryKey, limit],
@@ -79,6 +82,12 @@ export function HomeProductSection({
 
   // Auto-hide if requires ratings and no rated products
   if (!isLoading && requireRatings && !products.some((p: any) => p.averageRating && p.averageRating > 0)) {
+    return null;
+  }
+
+  // A "best sellers" rail is meaningless before anything has sold — the sort
+  // would otherwise fall back to an arbitrary ordering of zero-sale products.
+  if (!isLoading && requireSoldCount && !products.some((p: any) => p.soldCount && p.soldCount > 0)) {
     return null;
   }
 
@@ -109,7 +118,7 @@ export function HomeProductSection({
             href={viewAllHref}
             className={`flex-shrink-0 flex items-center gap-1 text-sm font-medium transition-colors ${viewAllClass}`}
           >
-            View All <HiArrowRight size={14} />
+            {t('common.viewAll')} <HiArrowRight size={14} className="rtl-flip" />
           </Link>
         </div>
 

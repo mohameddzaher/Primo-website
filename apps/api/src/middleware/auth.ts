@@ -164,6 +164,36 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
   next();
 };
 
+/**
+ * Require a full admin (admin or super_admin) — deliberately EXCLUDES `staff`.
+ *
+ * `requireAdmin` admits `staff`, which is correct for the day-to-day admin
+ * panel where the granular `requirePermission` checks do the real gating. But
+ * the inventory, accounting and SEO routers have no per-resource permission key
+ * in the permission model, so `requireAdmin` alone let any staff account — even
+ * one with every permission set to false — write the financial ledger, adjust
+ * stock and rewrite site-wide SEO. Those routers use this guard instead.
+ */
+export const requireAdminOnly = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (!req.user) {
+    res.status(401).json({
+      success: false,
+      error: 'Authentication required.',
+    });
+    return;
+  }
+
+  if (!['admin', 'super_admin'].includes(req.user.role)) {
+    res.status(403).json({
+      success: false,
+      error: 'Administrator access required.',
+    });
+    return;
+  }
+
+  next();
+};
+
 // Require authentication (alias for use after authenticate middleware)
 export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction): void => {
   if (!req.user) {

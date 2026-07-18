@@ -20,3 +20,4 @@ export * from './Testimonial';
 export * from './Brand';
 export * from './Settings';
 export * from './Referral';
+export * from './Return';

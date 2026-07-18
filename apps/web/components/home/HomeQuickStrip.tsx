@@ -1,11 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
-import { categoriesApi, cmsApi } from '@/lib/api';
+import { productsApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-client';
 import { getImageUrl } from '@/lib/utils';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
   try {
@@ -25,23 +28,25 @@ interface QuickCard {
 }
 
 function QuickCardItem({ card }: { card: QuickCard }) {
+  // Track load failures in state so a broken URL genuinely falls back to the
+  // emoji instead of leaving an empty tile.
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImage = Boolean(card.image) && !imgFailed;
+
   return (
     <Link
       href={card.href}
       className="group flex-shrink-0 flex flex-col items-center gap-2 w-[72px] sm:w-20"
     >
       <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-beige-100 relative flex items-center justify-center ring-1 ring-beige-200 group-hover:ring-primary-400 group-hover:shadow-md transition-all duration-200">
-        {card.image ? (
+        {showImage ? (
           <Image
-            src={card.image}
+            src={card.image as string}
             alt={card.label}
             fill
             className="object-cover"
             sizes="64px"
-            onError={(e) => {
-              // Hide broken image and let parent show emoji fallback
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
+            onError={() => setImgFailed(true)}
           />
         ) : card.emoji ? (
           <span className="text-2xl select-none">{card.emoji}</span>
@@ -57,17 +62,8 @@ function QuickCardItem({ card }: { card: QuickCard }) {
 }
 
 export function HomeQuickStrip() {
-  const { data: categories = [] } = useQuery({
-    queryKey: queryKeys.categories.list(),
-    queryFn: categoriesApi.getAll,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const { data: settingsCms } = useQuery({
-    queryKey: ['cms-homepage_quick_strip'],
-    queryFn: () => cmsApi.getContent('homepage_quick_strip'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const t = useT();
+  const { data: settingsCms } = useCmsContent('homepage_quick_strip');
 
   const settings = parseCmsJson(settingsCms, {
     enabled: true,
@@ -76,17 +72,53 @@ export function HomeQuickStrip() {
     customShortcuts: [],
   });
 
+  const showOnSale = settings.enabled !== false && settings.showOnSale !== false;
+  const showNewArrivals = settings.enabled !== false && settings.showNewArrivals !== false;
+
+  // The two built-in shortcuts borrow artwork from a representative product so
+  // the strip is all imagery rather than a mix of photos and emoji. Nothing is
+  // hardcoded — the deepest-discounted product stands in for "On Sale" and the
+  // freshest product for "New Arrivals".
+  const { data: onSaleSample } = useQuery({
+    queryKey: ['quick-strip-sample', 'on-sale'],
+    queryFn: () => productsApi.getAll({ onSale: true, sort: 'discount', limit: 1 }),
+    staleTime: 5 * 60 * 1000,
+    enabled: showOnSale,
+  });
+
+  const { data: newArrivalSample } = useQuery({
+    queryKey: ['quick-strip-sample', 'new-arrivals'],
+    queryFn: () => productsApi.getAll({ sort: 'newest', limit: 1 }),
+    staleTime: 5 * 60 * 1000,
+    enabled: showNewArrivals,
+  });
+
+  const onSaleImage = getImageUrl(onSaleSample?.products?.[0]?.images?.[0]);
+  const newArrivalImage = getImageUrl(newArrivalSample?.products?.[0]?.images?.[0]);
+
   if (settings.enabled === false) return null;
 
   // Build the cards list
   const cards: QuickCard[] = [];
 
-  if (settings.showOnSale !== false) {
-    cards.push({ id: '__on_sale', label: 'On Sale', href: '/products?onSale=true', emoji: '🏷️' });
+  if (showOnSale) {
+    cards.push({
+      id: '__on_sale',
+      label: t('home.onSale'),
+      href: '/products?onSale=true',
+      image: onSaleImage,
+      emoji: '🏷️',
+    });
   }
 
-  if (settings.showNewArrivals !== false) {
-    cards.push({ id: '__new_arrivals', label: 'New Arrivals', href: '/products?newArrivals=true', emoji: '✨' });
+  if (showNewArrivals) {
+    cards.push({
+      id: '__new_arrivals',
+      label: t('home.newArrivals'),
+      href: '/products?newArrivals=true',
+      image: newArrivalImage,
+      emoji: '✨',
+    });
   }
 
   // Add custom shortcuts
@@ -97,21 +129,11 @@ export function HomeQuickStrip() {
     : [];
   cards.push(...customShortcuts);
 
-  // Add category cards from DB — deduplicate by _id
-  const seen = new Set<string>();
-  const parentCategories = (categories as any[]).filter((c) => !c.parentId && c.isActive !== false);
-  for (const cat of parentCategories) {
-    const id = cat._id?.toString();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    cards.push({
-      id,
-      label: cat.name,
-      href: `/products?category=${cat._id}`,
-      image: getImageUrl(cat.image) || undefined,
-      emoji: cat.icon || '📦',
-    });
-  }
+  // NOTE: category shortcuts are deliberately NOT listed here. Every parent
+  // category already appears in the header's category bar and mega menu, so
+  // repeating them directly beneath the hero was pure duplication and pushed
+  // the actual merchandising further down the page. This strip is now only the
+  // two campaign entry points (+ any custom shortcuts the admin adds).
 
   if (cards.length === 0) return null;
 

@@ -11,6 +11,7 @@ import { cartApi } from '@/lib/api';
 import { formatCurrency, getDiscountedPrice } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
 import { Button } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import toast from 'react-hot-toast';
 
 export function CartDrawer() {
@@ -27,41 +28,42 @@ export function CartDrawer() {
   } = useCartStore();
 
   const { settings } = useSettings();
+  const t = useT();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const subtotal = getSubtotal();
   const total = getTotal();
 
-  const handleUpdateQuantity = async (productId: string, newQuantity: number) => {
+  const handleUpdateQuantity = async (productId: string, newQuantity: number, variantId?: string) => {
     if (newQuantity < 1) return;
     setUpdatingId(productId);
     try {
-      await cartApi.updateQuantity(productId, newQuantity);
-      updateQuantity(productId, newQuantity);
+      await cartApi.updateQuantity(productId, newQuantity, variantId);
+      updateQuantity(productId, newQuantity, variantId);
     } catch (error: any) {
       // If 404 (item not in backend), try to add it first
       if (error.response?.status === 404) {
         try {
           await cartApi.addItem(productId, newQuantity);
-          updateQuantity(productId, newQuantity);
+          updateQuantity(productId, newQuantity, variantId);
         } catch (addError) {
-          toast.error('Failed to update quantity');
+          toast.error(t('shop.toast.qtyUpdateFailed'));
         }
       } else {
-        toast.error('Failed to update quantity');
+        toast.error(t('shop.toast.qtyUpdateFailed'));
       }
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const handleRemoveItem = async (productId: string) => {
+  const handleRemoveItem = async (productId: string, variantId?: string) => {
     setUpdatingId(productId);
     try {
-      await cartApi.removeItem(productId);
-      removeItem(productId);
+      await cartApi.removeItem(productId, variantId);
+      removeItem(productId, variantId);
     } catch (error) {
-      toast.error('Failed to remove item');
+      toast.error(t('shop.toast.removeFailed'));
     } finally {
       setUpdatingId(null);
     }
@@ -86,28 +88,29 @@ export function CartDrawer() {
         {/* Drawer */}
         <div className="fixed inset-0 overflow-hidden">
           <div className="absolute inset-0 overflow-hidden">
-            <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
+            <div className="pointer-events-none fixed inset-y-0 end-0 flex max-w-full ps-10">
               <Transition.Child
                 as={Fragment}
                 enter="transform transition ease-out duration-300"
-                enterFrom="translate-x-full"
-                enterTo="translate-x-0"
+                enterFrom="translate-x-full rtl:-translate-x-full"
+                enterTo="translate-x-0 rtl:translate-x-0"
                 leave="transform transition ease-in duration-200"
-                leaveFrom="translate-x-0"
-                leaveTo="translate-x-full"
+                leaveFrom="translate-x-0 rtl:translate-x-0"
+                leaveTo="translate-x-full rtl:-translate-x-full"
               >
                 <Dialog.Panel className="pointer-events-auto w-screen max-w-md">
                   <div className="flex h-full flex-col bg-white shadow-soft-xl">
                     {/* Header */}
                     <div className="flex items-center justify-between px-6 py-4 border-b border-beige-200">
                       <Dialog.Title className="text-lg font-semibold text-dark-900">
-                        Shopping Cart
-                        <span className="ml-2 text-sm font-normal text-dark-500">
-                          ({items.length} {items.length === 1 ? 'item' : 'items'})
+                        {t('cart.title')}
+                        <span className="ms-2 text-sm font-normal text-dark-500">
+                          {t('shop.cart.itemsCount', { count: items.length })}
                         </span>
                       </Dialog.Title>
                       <button
                         onClick={closeCart}
+                        aria-label={t('common.close')}
                         className="p-2 text-dark-400 hover:text-dark-600 hover:bg-beige-100 rounded-lg transition-colors"
                       >
                         <HiOutlineX size={20} />
@@ -134,17 +137,17 @@ export function CartDrawer() {
                             </svg>
                           </div>
                           <h3 className="text-lg font-medium text-dark-900">
-                            Your cart is empty
+                            {t('cart.empty')}
                           </h3>
                           <p className="mt-1 text-sm text-dark-500">
-                            Start shopping to add items to your cart
+                            {t('shop.cart.emptyDrawerHint')}
                           </p>
                           <Button
                             onClick={closeCart}
                             variant="primary"
                             className="mt-6"
                           >
-                            Continue Shopping
+                            {t('common.continueShopping')}
                           </Button>
                         </div>
                       ) : (
@@ -207,12 +210,17 @@ export function CartDrawer() {
                                     >
                                       {item.product.title}
                                     </Link>
+                                    {item.variantValue && (
+                                      <p className="mt-0.5 text-xs text-dark-500">
+                                        {item.variantName ? `${item.variantName}: ` : ''}{item.variantValue}
+                                      </p>
+                                    )}
                                     <div className="mt-1 flex items-center gap-2">
-                                      <span className="text-sm font-semibold text-dark-900">
+                                      <span className="text-sm font-semibold text-dark-900 ltr-nums">
                                         {formatCurrency(price)}
                                       </span>
                                       {item.product?.discount && item.product.discount > 0 && (
-                                        <span className="text-xs text-dark-400 line-through">
+                                        <span className="text-xs text-dark-400 line-through ltr-nums">
                                           {formatCurrency(item.product?.price || 0)}
                                         </span>
                                       )}
@@ -225,10 +233,12 @@ export function CartDrawer() {
                                           onClick={() =>
                                             handleUpdateQuantity(
                                               item.productId,
-                                              item.quantity - 1
+                                              item.quantity - 1,
+                                              item.variantId
                                             )
                                           }
                                           disabled={item.quantity <= 1 || updatingId === item.productId}
+                                          aria-label={t('shop.a11y.decreaseQty')}
                                           className="p-1 text-dark-500 hover:text-dark-700 hover:bg-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                           <HiMinus size={14} />
@@ -240,18 +250,21 @@ export function CartDrawer() {
                                           onClick={() =>
                                             handleUpdateQuantity(
                                               item.productId,
-                                              item.quantity + 1
+                                              item.quantity + 1,
+                                              item.variantId
                                             )
                                           }
                                           disabled={item.quantity >= (item.product?.stock || 999) || updatingId === item.productId}
+                                          aria-label={t('shop.a11y.increaseQty')}
                                           className="p-1 text-dark-500 hover:text-dark-700 hover:bg-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                           <HiPlus size={14} />
                                         </button>
                                       </div>
                                       <button
-                                        onClick={() => handleRemoveItem(item.productId)}
+                                        onClick={() => handleRemoveItem(item.productId, item.variantId)}
                                         disabled={updatingId === item.productId}
+                                        aria-label={t('shop.a11y.removeItem')}
                                         className="p-1.5 text-error-500 hover:text-error-600 hover:bg-error-50 rounded transition-colors disabled:opacity-50"
                                       >
                                         <HiOutlineTrash size={16} />
@@ -272,26 +285,26 @@ export function CartDrawer() {
                         {/* Summary */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-dark-600">Subtotal</span>
-                            <span className="font-medium text-dark-900">
+                            <span className="text-dark-600">{t('cart.subtotal')}</span>
+                            <span className="font-medium text-dark-900 ltr-nums">
                               {formatCurrency(subtotal)}
                             </span>
                           </div>
                           {discountCode && discountAmount > 0 && (
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-success-600">
-                                Discount ({discountCode})
+                                {t('shop.cart.discountWithCode', { code: discountCode })}
                               </span>
-                              <span className="font-medium text-success-600">
+                              <span className="font-medium text-success-600 ltr-nums">
                                 -{formatCurrency(discountAmount)}
                               </span>
                             </div>
                           )}
                           <div className="flex items-center justify-between pt-2 border-t border-beige-200">
                             <span className="text-base font-semibold text-dark-900">
-                              Total
+                              {t('cart.total')}
                             </span>
-                            <span className="text-lg font-bold text-dark-900">
+                            <span className="text-lg font-bold text-dark-900 ltr-nums">
                               {formatCurrency(total)}
                             </span>
                           </div>
@@ -301,20 +314,23 @@ export function CartDrawer() {
                         <div className="space-y-2">
                           <Link href="/checkout" onClick={closeCart}>
                             <Button variant="primary" fullWidth size="lg">
-                              Checkout
+                              {t('checkout.title')}
                             </Button>
                           </Link>
-                          <Link href="/account/cart" onClick={closeCart}>
+                          <Link href="/cart" onClick={closeCart}>
                             <Button variant="secondary" fullWidth>
-                              View Cart
+                              {t('shop.cart.viewCart')}
                             </Button>
                           </Link>
                         </div>
 
                         <p className="text-xs text-center text-dark-500">
                           {settings.enableTax && settings.taxRate > 0
-                            ? `${settings.taxLabel || 'VAT'} (${settings.taxRate}%) and shipping calculated at checkout`
-                            : 'Shipping calculated at checkout'}
+                            ? t('shop.cart.taxShippingAtCheckout', {
+                                label: settings.taxLabel || 'VAT',
+                                rate: settings.taxRate,
+                              })
+                            : t('shop.cart.shippingAtCheckout')}
                         </p>
                       </div>
                     )}

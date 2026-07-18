@@ -15,27 +15,38 @@ import {
   HiOutlineX,
   HiChevronDown,
   HiViewGrid,
+  HiOutlineHome,
 } from 'react-icons/hi';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useCartStore, useUIStore, useWishlistStore } from '@/lib/store';
 import { productsApi, categoriesApi } from '@/lib/api';
 import { useSettings } from '@/lib/settings-context';
+import { useT } from '@/lib/i18n';
 import { Button } from '@/components/ui';
 import { TopCategoryBar } from './TopCategoryBar';
 import { AnnouncementBar } from './AnnouncementBar';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 const navigation = [
-  { name: 'Home', href: '/' },
-  { name: 'Products', href: '/products' },
-  { name: 'Blog', href: '/blog' },
-  { name: 'About', href: '/about' },
-  { name: 'Contact', href: '/contact' },
-];
+  { key: 'nav.home', href: '/' },
+  { key: 'nav.products', href: '/products' },
+  { key: 'nav.blog', href: '/blog' },
+  { key: 'nav.about', href: '/about' },
+  { key: 'nav.contact', href: '/contact' },
+] as const;
+
+// Left-hand items of the mobile bottom nav (Search / Cart / Account are rendered
+// separately because they trigger actions rather than plain navigation).
+const bottomNavLinks = [
+  { key: 'nav.home', href: '/', icon: HiOutlineHome },
+  { key: 'nav.categories', href: '/categories', icon: HiViewGrid },
+] as const;
 
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { settings } = useSettings();
+  const t = useT();
   const [isScrolled, setIsScrolled] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -163,7 +174,7 @@ export function Navbar() {
                         )}
                       >
                         <HiViewGrid size={16} />
-                        All Departments
+                        {t('nav.allCategories')}
                         <HiChevronDown
                           size={14}
                           className={cn('transition-transform duration-200', open && 'rotate-180')}
@@ -244,7 +255,7 @@ export function Navbar() {
 
               {navigation.map((item) => (
                 <Link
-                  key={item.name}
+                  key={item.key}
                   href={item.href}
                   className={cn(
                     'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
@@ -253,18 +264,21 @@ export function Navbar() {
                       : 'text-dark-700 hover:text-dark-900 hover:bg-beige-100'
                   )}
                 >
-                  {item.name}
+                  {t(item.key)}
                 </Link>
               ))}
             </div>
 
             {/* Actions */}
             <div className="flex items-center gap-2">
+              {/* Language (English / العربية) */}
+              <LanguageSwitcher variant="compact" className="hidden sm:inline-flex" />
+
               {/* Search */}
               <button
                 onClick={() => setShowSearch(true)}
                 className="p-2 text-dark-600 hover:text-dark-900 transition-colors"
-                aria-label="Search"
+                aria-label={t('nav.search')}
               >
                 <HiOutlineSearch size={22} />
               </button>
@@ -487,11 +501,11 @@ export function Navbar() {
                                 </div>
                                 <div className="text-right flex-shrink-0">
                                   <p className="text-sm font-bold text-dark-900">
-                                    {finalPrice.toLocaleString()} EGP
+                                    {finalPrice.toLocaleString()} SAR
                                   </p>
                                   {product.discount > 0 && (
                                     <p className="text-xs text-dark-400 line-through">
-                                      {product.price.toLocaleString()} EGP
+                                      {product.price.toLocaleString()} SAR
                                     </p>
                                   )}
                                 </div>
@@ -569,7 +583,7 @@ export function Navbar() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-1">
                   {navigation.map((item) => (
                     <Link
-                      key={item.name}
+                      key={item.key}
                       href={item.href}
                       className={cn(
                         'block px-4 py-3 text-sm font-medium rounded-lg',
@@ -578,7 +592,7 @@ export function Navbar() {
                           : 'text-dark-700 hover:bg-beige-100'
                       )}
                     >
-                      {item.name}
+                      {t(item.key)}
                     </Link>
                   ))}
                 </div>
@@ -634,6 +648,72 @@ export function Navbar() {
 
       {/* Spacer: top bar (32px desktop) + main nav (64px) + category bar (~40px) */}
       <div className="h-[140px]" />
+
+      {/* Mobile bottom navigation — primary reach targets on small screens */}
+      <nav
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 h-16 bg-white border-t border-beige-200 shadow-soft"
+        aria-label="Mobile navigation"
+      >
+        <div className="grid grid-cols-5 h-full">
+          {bottomNavLinks.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={cn(
+                  'flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors',
+                  isActive ? 'text-primary-600' : 'text-dark-500 hover:text-dark-900'
+                )}
+              >
+                <item.icon size={22} />
+                {t(item.key)}
+              </Link>
+            );
+          })}
+
+          {/* Search opens the existing search dialog */}
+          <button
+            type="button"
+            onClick={() => setShowSearch(true)}
+            className="flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-dark-500 hover:text-dark-900 transition-colors"
+          >
+            <HiOutlineSearch size={22} />
+            Search
+          </button>
+
+          {/* Cart with live badge */}
+          <button
+            type="button"
+            onClick={openCart}
+            className="relative flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-dark-500 hover:text-dark-900 transition-colors"
+          >
+            <span className="relative">
+              <HiOutlineShoppingBag size={22} />
+              {cartItemCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 text-[10px] font-bold text-white bg-primary-600 rounded-full flex items-center justify-center">
+                  {cartItemCount > 99 ? '99+' : cartItemCount}
+                </span>
+              )}
+            </span>
+            Cart
+          </button>
+
+          <Link
+            href={isAuthenticated ? '/account/profile' : '/auth/login'}
+            className={cn(
+              'flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors',
+              pathname.startsWith('/account') ? 'text-primary-600' : 'text-dark-500 hover:text-dark-900'
+            )}
+          >
+            <HiOutlineUser size={22} />
+            Account
+          </Link>
+        </div>
+      </nav>
+
+      {/* Keep the fixed bottom nav from covering page content on mobile */}
+      <style>{`@media (max-width: 1023px) { body { padding-bottom: 4rem; } }`}</style>
     </>
   );
 }

@@ -149,10 +149,10 @@ export default function HomepageContentPage() {
 
 // ========== HELPER ==========
 
-function parseCmsValue(data: any, fallback: any) {
+function parseCmsValue<T>(data: any, fallback: T): T {
   try {
     if (data?.value) {
-      return typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      return (typeof data.value === 'string' ? JSON.parse(data.value) : data.value) as T;
     }
   } catch {}
   return fallback;
@@ -186,7 +186,7 @@ function useSaveContent(key: string) {
 
 function FeaturesEditor({ data }: { data: any }) {
   const featuresDefault = [
-    { icon: '🚚', title: 'Free Shipping', description: 'On orders over EGP 2,000' },
+    { icon: '🚚', title: 'Free Shipping', description: 'On orders over SAR 500' },
     { icon: '🛡️', title: '2 Year Warranty', description: 'Full coverage guarantee' },
     { icon: '↩️', title: 'Easy Returns', description: '30-day return policy' },
     { icon: '💬', title: '24/7 Support', description: 'Expert assistance anytime' },
@@ -419,7 +419,7 @@ function NewsletterEditor({ data }: { data: any }) {
 
 function HeroBadgesEditor({ data }: { data: any }) {
   const badgesDefault = [
-    { icon: '🚚', title: 'Free Shipping', subtitle: 'On orders over EGP 2,000' },
+    { icon: '🚚', title: 'Free Shipping', subtitle: 'On orders over SAR 500' },
     { icon: '🛡️', title: '2-Year Warranty', subtitle: 'On all products' },
     { icon: '🔒', title: 'Secure Payment', subtitle: 'Multiple options' },
     { icon: '💬', title: '24/7 Support', subtitle: 'Expert assistance' },
@@ -1343,7 +1343,7 @@ function AnnouncementBarEditor({ data }: { data: any }) {
   const defaultVal = {
     enabled: true,
     messages: [
-      { text: 'Free shipping on orders over EGP 500 🚚', enabled: true },
+      { text: 'Free shipping on orders over SAR 500 🚚', enabled: true },
     ],
   };
 
@@ -1417,7 +1417,7 @@ function AnnouncementBarEditor({ data }: { data: any }) {
               className="flex-1 px-3 py-2 border border-beige-300 rounded-lg text-sm"
               value={msg.text}
               onChange={(e) => updateMessage(i, 'text', e.target.value)}
-              placeholder="e.g. Free shipping on orders over EGP 500 🚚"
+              placeholder="e.g. Free shipping on orders over SAR 500 🚚"
             />
             <label className="flex items-center gap-1 text-xs text-dark-500 cursor-pointer flex-shrink-0">
               <input

@@ -220,15 +220,15 @@ export default function CategoryClient() {
                           {product.salePrice ? (
                             <>
                               <span className="font-semibold text-primary-600">
-                                EGP {product.salePrice.toLocaleString()}
+                                SAR {product.salePrice.toLocaleString()}
                               </span>
                               <span className="text-sm text-dark-400 line-through">
-                                EGP {product.price.toLocaleString()}
+                                SAR {product.price.toLocaleString()}
                               </span>
                             </>
                           ) : (
                             <span className="font-semibold text-dark-900">
-                              EGP {product.price.toLocaleString()}
+                              SAR {product.price.toLocaleString()}
                             </span>
                           )}
                         </div>

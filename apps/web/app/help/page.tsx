@@ -58,7 +58,7 @@ const topics = [
     links: [
       { label: 'Live chat support', href: '/contact' },
       { label: 'Email us', href: '/contact' },
-      { label: 'Call us: +20 123 456 789', href: 'tel:+20123456789' },
+      { label: 'Call us: +966 11 234 5678', href: 'tel:+966112345678' },
     ],
   },
 ];

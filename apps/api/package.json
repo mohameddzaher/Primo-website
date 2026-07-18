@@ -8,9 +8,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
+    "seed:catalog": "tsx src/scripts/seed-real-products.ts",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "seed:blog": "tsx src/scripts/seed-blog.ts"
   },
   "dependencies": {
     "@primo/shared": "*",

@@ -6,7 +6,7 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import { createOrderSchema, updateOrderStatusSchema, orderFiltersSchema, paginationSchema } from '@primo/shared';
 import { Order, IOrderItem } from '../models/Order';
-import { Product } from '../models/Product';
+import { Product, resolveLinePricing } from '../models/Product';
 import { Cart } from '../models/Cart';
 import { Settings } from '../models/Settings';
 import { AuditLog } from '../models/AuditLog';
@@ -18,25 +18,138 @@ import { Offer } from '../models/Offer';
 import { PointsTransaction } from '../models/PointsTransaction';
 import { authenticate, requireAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
-import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
-import { sendOrderConfirmationEmail } from '../services/email.service';
+import { invalidateOnWrite } from '../middleware/cache';
+import { bookOrderRevenue } from '../services/ledger.service';
+import { asyncHandler, NotFoundError, BadRequestError, ConflictError } from '../middleware/errorHandler';
+import { sendOrderConfirmationEmail, sendOrderStatusEmail } from '../services/email.service';
 import { notifyAdminsNewOrder, notifyOrderStatusChange, notifyAdminsLowStock } from '../services/notification.service';
 import { getOrderStatusLabel } from '@primo/shared';
 
 const router = Router();
 
-// Shared side-effects when an order is cancelled (used by both the customer
+// Stock/rating changes here must refresh cached product listings
+router.use(invalidateOnWrite('products'));
+
+// ─── Shipment tracking ───────────────────────────────────────────────────────
+// Carriers that actually operate in Saudi Arabia. `{tracking}` is replaced with
+// the consignment number.
+const CARRIER_TRACKING_URLS: Record<string, string> = {
+  smsa: 'https://www.smsaexpress.com/trackn?tracknumbers={tracking}',
+  aramex: 'https://www.aramex.com/track/results?ShipmentNumber={tracking}',
+  naqel: 'https://www.naqelexpress.com/en/track-shipment/?waybill={tracking}',
+  spl: 'https://splonline.com.sa/en/track-and-trace/?trackingNumber={tracking}',
+  'saudi post': 'https://splonline.com.sa/en/track-and-trace/?trackingNumber={tracking}',
+  dhl: 'https://www.dhl.com/sa-en/home/tracking.html?tracking-id={tracking}',
+};
+
+// Common spellings/aliases an admin might type, mapped to the keys above.
+const CARRIER_ALIASES: Record<string, string> = {
+  'smsa express': 'smsa',
+  'aramex express': 'aramex',
+  'naqel express': 'naqel',
+  'saudi post | spl': 'spl',
+  splonline: 'spl',
+  'dhl express': 'dhl',
+};
+
+/**
+ * Build a customer-facing tracking URL for a carrier. Falls back to a generic
+ * multi-carrier tracker so an unknown courier still yields a working link
+ * rather than a dead end.
+ */
+function buildTrackingUrl(carrier: string, trackingNumber: string): string {
+  const key = carrier.trim().toLowerCase();
+  const resolved = CARRIER_ALIASES[key] || key;
+  const template = CARRIER_TRACKING_URLS[resolved];
+  const encoded = encodeURIComponent(trackingNumber);
+
+  if (template) return template.replace('{tracking}', encoded);
+  return `https://t.17track.net/en#nums=${encoded}`;
+}
+
+// ─── Stock movement (variant-aware) ──────────────────────────────────────────
+// A single, shared pair of primitives for every stock change an order causes, so
+// there is exactly ONE stock path whether or not a variant is involved.
+//
+// When a line carries a variantId, the variant's own stock and the product's
+// aggregate `stockQuantity` are moved together inside ONE `$inc`, matched by
+// `arrayFilters`. That keeps the aggregate (which powers listing pages, the
+// isInStock virtual and low-stock alerts) exactly in step with the sum of its
+// variants, with no second round-trip that could interleave with another buyer.
+
+/**
+ * Atomically RESERVE `quantity` units. The filter guards on sufficient stock —
+ * on the variant AND the product — so a concurrent checkout of the last unit
+ * makes this return null rather than overselling.
+ */
+async function reserveLineStock(
+  productId: any,
+  variantId: string | undefined,
+  quantity: number
+): Promise<any | null> {
+  const filter: any = {
+    _id: productId,
+    isActive: true,
+    stockQuantity: { $gte: quantity },
+  };
+  const inc: any = { stockQuantity: -quantity, soldCount: quantity };
+  const options: any = { new: true };
+
+  if (variantId) {
+    filter.variants = { $elemMatch: { id: variantId, stockQuantity: { $gte: quantity } } };
+    inc['variants.$[v].stockQuantity'] = -quantity;
+    options.arrayFilters = [{ 'v.id': variantId }];
+  }
+
+  return Product.findOneAndUpdate(filter, { $inc: inc }, options);
+}
+
+/**
+ * RELEASE `quantity` units back — used both to roll back a partially reserved
+ * order and to restore stock on cancellation/return. Unguarded by design: giving
+ * stock back must always succeed.
+ */
+async function releaseLineStock(
+  productId: any,
+  variantId: string | undefined,
+  quantity: number
+): Promise<void> {
+  const inc: any = { stockQuantity: quantity, soldCount: -quantity };
+  const options: any = {};
+
+  if (variantId) {
+    inc['variants.$[v].stockQuantity'] = quantity;
+    options.arrayFilters = [{ 'v.id': variantId }];
+  }
+
+  await Product.updateOne({ _id: productId }, { $inc: inc }, options);
+}
+
+// Shared side-effects when an order is cancelled or failed (used by the customer
 // self-cancel route and the admin status-change route): restore stock, refund
-// any redeemed loyalty points, and record a refund transaction. Sets the
-// cancellation fields on the order but leaves status/save to the caller.
+// any redeemed loyalty points, and — only when money was actually collected —
+// record a refund transaction. Sets the cancellation fields on the order but
+// leaves status/save to the caller.
+// `terminalStatus` is the status the order is moving into ('cancelled' | 'failed');
+// a failed delivery leaks exactly the same stock/revenue as a cancellation, so it
+// is handled identically here.
 async function restoreOrderOnCancel(
   order: any,
   actorUserId: string | undefined,
-  reason?: string
+  reason?: string,
+  terminalStatus: 'cancelled' | 'failed' = 'cancelled'
 ): Promise<void> {
+  const label = terminalStatus === 'failed' ? 'failed' : 'cancelled';
+
+  // Was any money actually collected? COD orders are only marked 'paid' on
+  // delivery, so an unpaid order must NOT produce a refund entry in the ledger.
+  const wasPaid = order.paymentStatus === 'paid';
+
   order.cancelledAt = new Date();
   if (reason) order.cancelReason = reason;
-  order.paymentStatus = 'refunded';
+  // Only a genuinely paid order can be refunded; otherwise the payment simply
+  // never completed.
+  order.paymentStatus = wasPaid ? 'refunded' : 'failed';
 
   // Restore stock + return movements. Batch-fetch all products (avoids N+1) and
   // restore each with an atomic $inc so concurrent stock changes aren't lost.
@@ -55,10 +168,8 @@ async function restoreOrderOnCancel(
     const previousStock = stockBefore.get(key) as number;
     const newStock = previousStock + item.quantity;
 
-    await Product.updateOne(
-      { _id: item.productId },
-      { $inc: { stockQuantity: item.quantity, soldCount: -item.quantity } }
-    );
+    // Restores the variant's stock too when the line was bought with an option.
+    await releaseLineStock(item.productId, item.variantId, item.quantity);
 
     await StockMovement.create({
       productId: item.productId,
@@ -66,7 +177,7 @@ async function restoreOrderOnCancel(
       quantity: item.quantity,
       previousStock,
       newStock,
-      reason: `Order ${order.orderNumber} cancelled`,
+      reason: `Order ${order.orderNumber} ${label}`,
       reference: order.orderNumber,
       orderId: order._id,
       userId: actorUserId,
@@ -86,21 +197,51 @@ async function restoreOrderOnCancel(
       type: 'refund',
       points: order.pointsRedeemed,
       orderId: order._id,
-      description: `Refund of ${order.pointsRedeemed} points for cancelled order ${order.orderNumber}`,
+      description: `Refund of ${order.pointsRedeemed} points for ${label} order ${order.orderNumber}`,
     });
   }
 
-  // Record refund transaction in the ledger
-  await Transaction.create({
-    type: 'debit',
-    amount: order.total,
-    category: 'order_refund',
-    description: `Refund for cancelled order ${order.orderNumber}`,
-    reference: order.orderNumber,
-    orderId: order._id,
-    date: new Date(),
-    createdBy: actorUserId,
-  });
+  // Record refund transaction in the ledger — ONLY when the customer actually
+  // paid. Booking a debit for an unpaid (e.g. COD) order would invent a refund
+  // for money that was never collected and understate revenue.
+  if (wasPaid) {
+    await Transaction.create({
+      type: 'debit',
+      amount: order.total,
+      category: 'order_refund',
+      description: `Refund for ${label} order ${order.orderNumber}`,
+      reference: order.orderNumber,
+      orderId: order._id,
+      date: new Date(),
+      createdBy: actorUserId,
+    });
+  }
+}
+
+// Customer-facing email for meaningful order status transitions. Addressed to
+// the ORDER's customer (shippingAddress.email), never an admin. Fire-and-forget:
+// a mail failure must never fail the status update, so everything is swallowed.
+const CUSTOMER_EMAIL_STATUSES = ['accepted', 'out_for_delivery', 'delivered', 'cancelled', 'failed'];
+
+async function emailCustomerOrderStatus(order: any, status: string): Promise<void> {
+  try {
+    if (!CUSTOMER_EMAIL_STATUSES.includes(status)) return;
+
+    const to = order.shippingAddress?.email;
+    if (!to) return;
+
+    await sendOrderStatusEmail(to, order.orderNumber, status, getOrderStatusLabel(status), {
+      customerName: order.shippingAddress?.fullName,
+      items: order.items.map((i: any) => ({
+        title: i.title,
+        quantity: i.quantity,
+        price: i.price,
+      })),
+      total: order.total,
+    });
+  } catch (emailErr) {
+    console.error('Error sending order status email:', emailErr);
+  }
 }
 
 // Get user's orders
@@ -168,7 +309,7 @@ router.post(
     // the last 20s (double-click / retry / flaky network), return that order
     // instead of creating a duplicate + decrementing stock twice.
     const itemSignature = [...items]
-      .map((it: any) => `${it.productId}:${it.quantity}`)
+      .map((it: any) => `${it.productId}:${it.variantId || ''}:${it.quantity}`)
       .sort()
       .join('|');
     const recentOrder = await Order.findOne({
@@ -179,7 +320,7 @@ router.post(
       .lean();
     if (recentOrder) {
       const recentSig = (recentOrder.items || [])
-        .map((it: any) => `${it.productId}:${it.quantity}`)
+        .map((it: any) => `${it.productId}:${it.variantId || ''}:${it.quantity}`)
         .sort()
         .join('|');
       if (recentSig === itemSignature) {
@@ -189,13 +330,15 @@ router.post(
     }
 
     // Validate and get products
-    const productIds = items.map((item: any) => item.productId);
+    // Distinct — one product may appear on several lines when the customer
+    // bought two different variants of it (e.g. the same fridge in two colours).
+    const productIds = [...new Set(items.map((item: any) => String(item.productId)))];
     const products = await Product.find({
       _id: { $in: productIds },
       isActive: true,
     });
 
-    if (products.length !== items.length) {
+    if (products.length !== productIds.length) {
       throw new BadRequestError('One or more products not found or unavailable');
     }
 
@@ -212,26 +355,45 @@ router.post(
         throw new BadRequestError(`Product ${item.productId} not found`);
       }
 
-      if (product.stockQuantity < item.quantity) {
+      // Resolve the variant (if any) server-side. The client's variantId is only
+      // ever a *reference* — its price modifier and stock are read from the DB.
+      const { variant, variantMissing, unitPrice, availableStock } = resolveLinePricing(
+        product,
+        item.variantId
+      );
+
+      if (product.variants.length > 0 && !item.variantId) {
+        throw new BadRequestError(`Please choose an option for ${product.title}`);
+      }
+      if (variantMissing) {
+        throw new BadRequestError(`The selected option for ${product.title} is no longer available`);
+      }
+
+      // Variant stock, not the product aggregate, gates a variant line.
+      if (availableStock < item.quantity) {
         throw new BadRequestError(`Insufficient stock for ${product.title}`);
       }
 
       const discountPct = product.discount ?? 0;
       const hasDiscount = discountPct > 0 &&
         (!product.discountEndsAt || new Date(product.discountEndsAt) > new Date());
-      const itemPrice = hasDiscount
-        ? product.price * (1 - discountPct / 100)
-        : product.price;
+      // unitPrice = discounted base price + the variant's priceModifier. The
+      // downstream shipping/discount/VAT math is unchanged.
+      const itemPrice = unitPrice;
 
       orderItems.push({
         productId: product._id,
         title: product.title,
-        sku: product.sku,
+        // The variant's SKU is what the warehouse actually picks.
+        sku: variant?.sku || product.sku,
+        variantId: variant?.id,
+        variantName: variant?.name,
+        variantValue: variant?.value,
         price: itemPrice,
-        originalPrice: hasDiscount ? product.price : undefined,
+        originalPrice: hasDiscount ? product.price + (variant?.priceModifier || 0) : undefined,
         discount: hasDiscount ? discountPct : undefined,
         quantity: item.quantity,
-        image: product.images[0]?.url,
+        image: variant?.image || product.images[0]?.url,
       });
 
       subtotal += itemPrice * item.quantity;
@@ -242,33 +404,30 @@ router.post(
     // high concurrency — it prevents overselling when many customers check out the
     // same product at once. If any item can't be reserved, roll back the ones that
     // were and abort so no order/charge/points side-effects happen.
+    // For a line with a variant the SAME guarded $inc also decrements that
+    // variant's stock (see reserveLineStock) — one atomic op covers both.
     const stockReservations: {
       productId: any;
+      variantId?: string;
       quantity: number;
       previousStock: number;
       newStock: number;
       product: any;
     }[] = [];
     for (const item of items) {
-      const reserved = await Product.findOneAndUpdate(
-        { _id: item.productId, isActive: true, stockQuantity: { $gte: item.quantity } },
-        { $inc: { stockQuantity: -item.quantity, soldCount: item.quantity } },
-        { new: true }
-      );
+      const reserved = await reserveLineStock(item.productId, item.variantId, item.quantity);
       if (!reserved) {
         for (const r of stockReservations) {
-          await Product.updateOne(
-            { _id: r.productId },
-            { $inc: { stockQuantity: r.quantity, soldCount: -r.quantity } }
-          );
+          await releaseLineStock(r.productId, r.variantId, r.quantity);
         }
-        const p = products.find((x) => x._id.toString() === item.productId);
+        const p = products.find((x) => x._id.toString() === String(item.productId));
         throw new BadRequestError(
           `Insufficient stock for ${p?.title || 'an item in your cart'} — the last units were just purchased. Please update your cart and try again.`
         );
       }
       stockReservations.push({
         productId: reserved._id,
+        variantId: item.variantId,
         quantity: item.quantity,
         previousStock: reserved.stockQuantity + item.quantity,
         newStock: reserved.stockQuantity,
@@ -386,7 +545,16 @@ router.post(
         },
       ],
       paymentMethod,
-      paymentStatus: paymentMethod === 'cash_on_delivery' ? 'pending' : 'pending',
+      // No payment gateway is integrated yet, so NO order may be reported as
+      // 'paid' at creation time — card/apple_pay included. Every method starts
+      // 'pending':
+      //   - cash_on_delivery -> flipped to 'paid' by the PATCH /:id/status
+      //     handler below when the order reaches 'delivered'.
+      //   - card / apple_pay -> TODO: when a real gateway (e.g. Moyasar/HyperPay/
+      //     Stripe) is integrated, its server-side webhook/confirmation handler is
+      //     the ONLY place allowed to set paymentStatus = 'paid' (together with
+      //     paymentIntentId). Never trust the client for this.
+      paymentStatus: 'pending',
       shippingAddress,
       notes,
       estimatedDelivery: new Date(Date.now() + (settings.estimatedDeliveryDays || 3) * 24 * 60 * 60 * 1000),
@@ -412,17 +580,15 @@ router.post(
       }
     }
 
-    // Create transaction record for accounting
-    await Transaction.create({
-      type: 'credit',
-      amount: total,
-      category: 'order_revenue',
-      description: `Revenue from order ${order.orderNumber}`,
-      reference: order.orderNumber,
-      orderId: order._id,
-      date: new Date(),
-      createdBy: req.userId,
-    });
+    // NOTE: revenue is deliberately NOT booked here.
+    //
+    // An order is created with paymentStatus 'pending' — no money has changed
+    // hands yet (COD is collected on delivery, and card/Apple Pay await gateway
+    // confirmation). Booking a credit at creation inflated revenue and, because
+    // a refund is only written for orders that were actually paid, a cancelled
+    // unpaid order left that credit stranded in the ledger forever.
+    // Revenue is now recognised in `bookOrderRevenue()` at the moment payment
+    // completes. See the `delivered` branch of the status handler.
 
     // Deduct loyalty points if redeemed
     if (pointsRedeemed > 0) {
@@ -574,8 +740,16 @@ router.post(
       });
 
       if (product) {
+        // Re-add the exact variant that was bought. If that option has since
+        // been removed or sold out, skip the line rather than silently
+        // substituting a different one.
+        const { variantMissing, availableStock } = resolveLinePricing(product, item.variantId);
+        if (variantMissing || availableStock <= 0) continue;
+
         const existingItem = cart.items.find(
-          (i) => i.productId.toString() === item.productId.toString()
+          (i) =>
+            i.productId.toString() === item.productId.toString() &&
+            (i.variantId || '') === (item.variantId || '')
         );
 
         if (existingItem) {
@@ -583,7 +757,8 @@ router.post(
         } else {
           cart.items.push({
             productId: item.productId,
-            quantity: Math.min(item.quantity, product.stockQuantity),
+            ...(item.variantId ? { variantId: item.variantId } : {}),
+            quantity: Math.min(item.quantity, availableStock),
             addedAt: new Date(),
           });
         }
@@ -651,6 +826,9 @@ router.post(
       'cancelled',
       getOrderStatusLabel('cancelled')
     ).catch(console.error);
+
+    // Confirm the cancellation to the customer by email
+    emailCustomerOrderStatus(order, 'cancelled').catch(console.error);
 
     res.json({
       success: true,
@@ -814,6 +992,14 @@ router.patch(
       order.deliveredAt = new Date();
       order.paymentStatus = 'paid';
 
+      // Payment has now completed (COD collected on delivery) — this is the
+      // point at which the revenue is real, so book it. Idempotent.
+      try {
+        await bookOrderRevenue(order, req.userId);
+      } catch (revenueErr) {
+        console.error('Failed to book order revenue:', revenueErr);
+      }
+
       // Award loyalty points on delivery
       try {
         const loyaltySettings = await (Settings as any).getSettings();
@@ -841,9 +1027,18 @@ router.patch(
       }
     }
 
-    if (status === 'cancelled') {
-      // Restore stock, refund redeemed loyalty points, and record the refund.
-      await restoreOrderOnCancel(order, req.userId, note);
+    // Both 'cancelled' and 'failed' end the order without the goods leaving us,
+    // so both must release the reserved stock and reverse any collected money.
+    // The `oldStatus` guard makes this idempotent: an order that was already
+    // cancelled/failed can never be restocked twice.
+    if (
+      (status === 'cancelled' || status === 'failed') &&
+      oldStatus !== 'cancelled' &&
+      oldStatus !== 'failed'
+    ) {
+      // Restore stock, refund redeemed loyalty points, and record the refund
+      // (the latter only if the order was actually paid).
+      await restoreOrderOnCancel(order, req.userId, note, status);
     }
 
     await order.save();
@@ -866,9 +1061,265 @@ router.patch(
       getOrderStatusLabel(status)
     ).catch(console.error);
 
+    // Email the customer about the transition (accepted / out_for_delivery /
+    // delivered / cancelled / failed)
+    emailCustomerOrderStatus(order, status).catch(console.error);
+
     res.json({
       success: true,
       data: order,
+    });
+  })
+);
+
+// Set / update shipment tracking (admin)
+router.patch(
+  '/:id/shipment',
+  authenticate,
+  requireAdmin,
+  requirePermission('orders', 'write'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const { carrier, trackingNumber, trackingUrl, estimatedDelivery } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new BadRequestError('Invalid order ID');
+    }
+
+    if (typeof carrier !== 'string' || !carrier.trim()) {
+      throw new BadRequestError('Carrier is required');
+    }
+    if (typeof trackingNumber !== 'string' || !trackingNumber.trim()) {
+      throw new BadRequestError('Tracking number is required');
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      throw new NotFoundError('Order');
+    }
+
+    if (order.status === 'cancelled' || order.status === 'failed') {
+      throw new BadRequestError(
+        `Cannot add shipment tracking to a ${order.status} order`
+      );
+    }
+
+    const cleanCarrier = carrier.trim();
+    const cleanTracking = trackingNumber.trim();
+    const oldShipment = order.shipment
+      ? {
+          carrier: order.shipment.carrier,
+          trackingNumber: order.shipment.trackingNumber,
+        }
+      : null;
+
+    order.shipment = {
+      carrier: cleanCarrier,
+      trackingNumber: cleanTracking,
+      // Respect an explicitly supplied URL, otherwise derive one from the carrier map.
+      trackingUrl:
+        typeof trackingUrl === 'string' && trackingUrl.trim()
+          ? trackingUrl.trim()
+          : buildTrackingUrl(cleanCarrier, cleanTracking),
+      // Stamp the ship date the first time tracking is recorded; later edits
+      // (typo fix, carrier swap) must not move it.
+      shippedAt: order.shipment?.shippedAt || new Date(),
+      estimatedDelivery: estimatedDelivery
+        ? new Date(estimatedDelivery)
+        : order.shipment?.estimatedDelivery || order.estimatedDelivery,
+    };
+
+    await order.save();
+
+    await AuditLog.create({
+      userId: req.userId,
+      action: 'update',
+      resource: 'order',
+      resourceId: order._id.toString(),
+      oldValue: { shipment: oldShipment },
+      newValue: {
+        shipment: {
+          carrier: order.shipment.carrier,
+          trackingNumber: order.shipment.trackingNumber,
+          trackingUrl: order.shipment.trackingUrl,
+        },
+      },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      data: order,
+    });
+  })
+);
+
+// Issue a (possibly partial) refund against an order (admin)
+router.post(
+  '/:id/refund',
+  authenticate,
+  requireAdmin,
+  requirePermission('orders', 'write'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const { amount, reason } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new BadRequestError('Invalid order ID');
+    }
+
+    const rawAmount = Number(amount);
+    if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+      throw new BadRequestError('Refund amount must be greater than 0');
+    }
+    // Money is SAR with 2 decimals; normalise so float noise can never sneak a
+    // fraction of a halala past the "must not exceed the total" guard.
+    const refundAmount = Math.round(rawAmount * 100) / 100;
+
+    const order = await Order.findById(id);
+    if (!order) {
+      throw new NotFoundError('Order');
+    }
+
+    // Only money that was actually collected can be given back. A 'pending'
+    // (e.g. undelivered COD) or 'failed' order never produced a payment, and an
+    // already fully-'refunded' order has nothing left to return.
+    if (order.paymentStatus !== 'paid') {
+      throw new BadRequestError(
+        order.paymentStatus === 'refunded'
+          ? 'This order has already been fully refunded'
+          : 'Only a paid order can be refunded'
+      );
+    }
+
+    const alreadyRefunded = (order.refunds || []).reduce(
+      (sum, r) => sum + (r.amount || 0),
+      0
+    );
+    if (Math.round((alreadyRefunded + refundAmount) * 100) / 100 > order.total) {
+      throw new BadRequestError(
+        `Refund exceeds the order total. Already refunded SAR ${alreadyRefunded.toFixed(
+          2
+        )} of SAR ${order.total.toFixed(2)}.`
+      );
+    }
+
+    // The check above is only advisory — it produces a friendly error. The
+    // binding guarantee is this single guarded atomic update, mirroring the
+    // returns refund flow: the refund is only appended if, *at write time*, the
+    // order is still 'paid' AND the existing refunds plus this one still fit
+    // inside the total. Two concurrent refund clicks therefore cannot both
+    // land beyond the total, and an identical amount submitted twice within
+    // 20s (double-click / retry) is rejected outright — same double-submit
+    // window used by order creation. Only the request that wins the claim
+    // writes to the ledger, so a Transaction is never double-written.
+    const claimed = await Order.findOneAndUpdate(
+      {
+        _id: order._id,
+        paymentStatus: 'paid',
+        refunds: {
+          $not: {
+            $elemMatch: {
+              amount: refundAmount,
+              refundedAt: { $gte: new Date(Date.now() - 20_000) },
+            },
+          },
+        },
+        $expr: {
+          $lte: [
+            {
+              $round: [
+                { $add: [{ $sum: '$refunds.amount' }, refundAmount] },
+                2,
+              ],
+            },
+            '$total',
+          ],
+        },
+      },
+      {
+        $push: {
+          refunds: {
+            amount: refundAmount,
+            reason: reason || undefined,
+            refundedAt: new Date(),
+            refundedBy: req.userId,
+          },
+        },
+      },
+      { new: true }
+    );
+
+    if (!claimed) {
+      throw new ConflictError(
+        'This refund could not be applied — it was either just processed or it would exceed the order total'
+      );
+    }
+
+    const refundedTotal =
+      Math.round(
+        (claimed.refunds || []).reduce((sum, r) => sum + (r.amount || 0), 0) * 100
+      ) / 100;
+    const fullyRefunded = refundedTotal >= claimed.total;
+
+    // Record the refund in the accounting ledger. This is the mirror of
+    // `bookOrderRevenue()`'s credit — the revenue was recognised once, at
+    // payment, so each refund writes exactly one offsetting debit for its own
+    // amount and never re-touches the original credit.
+    await Transaction.create({
+      type: 'debit',
+      amount: refundAmount,
+      category: 'order_refund',
+      description: `${fullyRefunded ? 'Refund' : 'Partial refund'} for order ${
+        claimed.orderNumber
+      }${reason ? ` — ${reason}` : ''}`,
+      reference: claimed.orderNumber,
+      orderId: claimed._id,
+      date: new Date(),
+      createdBy: req.userId,
+    });
+
+    // Only a cumulative refund that reaches the full total flips the payment
+    // status; anything less leaves the order 'paid' (it is a partial refund).
+    // Guarded on 'paid' so it stays idempotent under concurrency.
+    if (fullyRefunded) {
+      await Order.updateOne(
+        { _id: claimed._id, paymentStatus: 'paid' },
+        { $set: { paymentStatus: 'refunded' } }
+      );
+      claimed.paymentStatus = 'refunded';
+    }
+
+    await AuditLog.create({
+      userId: req.userId,
+      action: 'update',
+      resource: 'order',
+      resourceId: claimed._id.toString(),
+      oldValue: { refundedTotal: refundedTotal - refundAmount, paymentStatus: 'paid' },
+      newValue: {
+        refundAmount,
+        reason,
+        refundedTotal,
+        paymentStatus: claimed.paymentStatus,
+      },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      message: fullyRefunded
+        ? 'Order fully refunded'
+        : `Partial refund of SAR ${refundAmount.toFixed(2)} recorded`,
+      data: {
+        orderNumber: claimed.orderNumber,
+        refundAmount,
+        refundedTotal,
+        remaining: Math.round((claimed.total - refundedTotal) * 100) / 100,
+        paymentStatus: claimed.paymentStatus,
+        refunds: claimed.refunds,
+      },
     });
   })
 );

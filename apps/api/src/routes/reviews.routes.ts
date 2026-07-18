@@ -11,10 +11,14 @@ import { Order } from '../models/Order';
 import { AuditLog } from '../models/AuditLog';
 import { authenticate, requireAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError, ForbiddenError } from '../middleware/errorHandler';
 import { notifyAdminsNewReview } from '../services/notification.service';
 
 const router = Router();
+
+// Stock/rating changes here must refresh cached product listings
+router.use(invalidateOnWrite('products'));
 
 // Recompute a product's averageRating + reviewCount from its approved reviews
 // using a DB-side aggregation. This avoids loading every review into memory

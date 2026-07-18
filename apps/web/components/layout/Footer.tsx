@@ -19,32 +19,46 @@ import {
 import { FaXTwitter } from "react-icons/fa6";
 import { categoriesApi } from "@/lib/api";
 import { useSettings } from "@/lib/settings-context";
+import { PaymentMethods } from "@/components/PaymentMethods";
+import { useT, type TranslationKey } from "@/lib/i18n";
 
-const supportLinks = [
-  { name: "Contact Us", href: "/contact" },
-  { name: "FAQs", href: "/faq" },
-  { name: "Track Order", href: "/track-order" },
-  { name: "Shipping Info", href: "/shipping" },
-  { name: "Returns & Exchanges", href: "/returns" },
-  { name: "Warranty", href: "/warranty" },
+// Static links are stored as translation keys and resolved at render time so
+// they follow the active locale.
+const supportLinks: { key: TranslationKey; href: string }[] = [
+  { key: "footer.contactUs", href: "/contact" },
+  { key: "footer.faqs", href: "/faq" },
+  { key: "nav.trackOrder", href: "/track-order" },
+  { key: "footer.shippingInfo", href: "/shipping" },
+  { key: "footer.returnsExchanges", href: "/returns" },
+  { key: "footer.warranty", href: "/warranty" },
 ];
 
-const companyLinks = [
-  { name: "About Us", href: "/about" },
-  { name: "Blog", href: "/blog" },
-  { name: "Careers", href: "/careers" },
-  { name: "Press", href: "/press" },
-  { name: "Privacy Policy", href: "/privacy" },
-  { name: "Terms of Service", href: "/terms" },
+const companyLinks: { key: TranslationKey; href: string }[] = [
+  { key: "footer.aboutUs", href: "/about" },
+  { key: "nav.blog", href: "/blog" },
+  { key: "footer.careers", href: "/careers" },
+  { key: "footer.press", href: "/press" },
+  { key: "footer.privacyPolicy", href: "/privacy" },
+  { key: "footer.terms", href: "/terms" },
+];
+
+const accountLinks: { key: TranslationKey; href: string }[] = [
+  { key: "footer.myAccount", href: "/account/profile" },
+  { key: "footer.orderHistory", href: "/account/orders" },
+  { key: "nav.wishlist", href: "/account/wishlist" },
+  { key: "cart.title", href: "/cart" },
+  { key: "account.referrals", href: "/account/referrals" },
 ];
 
 export function Footer() {
   const { settings } = useSettings();
+  const t = useT();
 
-  const [shopLinks, setShopLinks] = useState([
-    { name: "All Products", href: "/products" },
-    { name: "Special Deals", href: "/products?onSale=true" },
-  ]);
+  // Category names come from the database and stay as the admin entered them;
+  // only the two static entries around them are translated.
+  const [categoryLinks, setCategoryLinks] = useState<
+    { name: string; href: string }[]
+  >([]);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -54,21 +68,24 @@ export function Footer() {
           .filter((cat: any) => !cat.parentId)
           .slice(0, 4);
 
-        const dynamicLinks = [
-          { name: "All Products", href: "/products" },
-          ...parentCategories.map((cat: any) => ({
+        setCategoryLinks(
+          parentCategories.map((cat: any) => ({
             name: cat.name,
             href: `/categories/${cat.slug}`,
-          })),
-          { name: "Special Deals", href: "/products?onSale=true" },
-        ];
-        setShopLinks(dynamicLinks);
+          }))
+        );
       } catch {
-        // Keep default static links on error
+        // Keep the static links only on error
       }
     };
     fetchCategories();
   }, []);
+
+  const shopLinks = [
+    { name: t("home.allProducts"), href: "/products" },
+    ...categoryLinks,
+    { name: t("home.specialDeals"), href: "/products?onSale=true" },
+  ];
 
   // Build social links dynamically from settings
   const socialLinks = [
@@ -142,8 +159,7 @@ export function Footer() {
             )}
             {!settings.siteDescription && (
               <p className="mt-3 text-sm text-dark-400 leading-relaxed">
-                Premium home appliances for modern living. Quality products,
-                exceptional service, and unmatched value.
+                {t("footer.tagline")}
               </p>
             )}
             <div className="mt-4 space-y-2">
@@ -153,7 +169,7 @@ export function Footer() {
                   className="flex items-center gap-2 text-sm text-dark-400 hover:text-white transition-colors"
                 >
                   <HiOutlinePhone size={16} />
-                  <span>{settings.sitePhone}</span>
+                  <span className="ltr-nums">{settings.sitePhone}</span>
                 </a>
               )}
               {settings.siteEmail && (
@@ -198,7 +214,7 @@ export function Footer() {
           {/* Shop Links */}
           <div>
             <h4 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">
-              Shop
+              {t("footer.shop")}
             </h4>
             <ul className="space-y-2">
               {shopLinks.map((link) => (
@@ -217,16 +233,16 @@ export function Footer() {
           {/* Support Links */}
           <div>
             <h4 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">
-              Support
+              {t("footer.support")}
             </h4>
             <ul className="space-y-2">
               {supportLinks.map((link) => (
-                <li key={link.name}>
+                <li key={link.key}>
                   <Link
                     href={link.href}
                     className="text-xs text-dark-400 hover:text-white transition-colors"
                   >
-                    {link.name}
+                    {t(link.key)}
                   </Link>
                 </li>
               ))}
@@ -236,16 +252,16 @@ export function Footer() {
           {/* Company Links */}
           <div>
             <h4 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">
-              Company
+              {t("footer.company")}
             </h4>
             <ul className="space-y-2">
               {companyLinks.map((link) => (
-                <li key={link.name}>
+                <li key={link.key}>
                   <Link
                     href={link.href}
                     className="text-xs text-dark-400 hover:text-white transition-colors"
                   >
-                    {link.name}
+                    {t(link.key)}
                   </Link>
                 </li>
               ))}
@@ -255,49 +271,19 @@ export function Footer() {
           {/* Account Links */}
           <div>
             <h4 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">
-              Account
+              {t("footer.account")}
             </h4>
             <ul className="space-y-2">
-              <li>
-                <Link
-                  href="/account/profile"
-                  className="text-xs text-dark-400 hover:text-white transition-colors"
-                >
-                  My Account
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/account/orders"
-                  className="text-xs text-dark-400 hover:text-white transition-colors"
-                >
-                  Order History
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/account/wishlist"
-                  className="text-xs text-dark-400 hover:text-white transition-colors"
-                >
-                  Wishlist
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/account/cart"
-                  className="text-xs text-dark-400 hover:text-white transition-colors"
-                >
-                  Shopping Cart
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/account/referrals"
-                  className="text-xs text-dark-400 hover:text-white transition-colors"
-                >
-                  Refer & Earn
-                </Link>
-              </li>
+              {accountLinks.map((link) => (
+                <li key={link.key}>
+                  <Link
+                    href={link.href}
+                    className="text-xs text-dark-400 hover:text-white transition-colors"
+                  >
+                    {t(link.key)}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
@@ -309,33 +295,15 @@ export function Footer() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             {/* Copyright */}
             <p className="text-xs text-dark-500">
-              &copy; {new Date().getFullYear()} {settings.siteName}. All rights
-              reserved.
+              &copy; <span className="ltr-nums">{new Date().getFullYear()}</span>{" "}
+              {settings.siteName}. {t("footer.rightsReserved")}.
             </p>
 
             {/* Payment Methods */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-dark-500">We accept:</span>
-              <div className="flex items-center gap-1.5">
-                <div className="w-8 h-5 bg-white rounded flex items-center justify-center">
-                  <span className="text-[8px] font-bold text-blue-600">
-                    VISA
-                  </span>
-                </div>
-                <div className="w-8 h-5 bg-white rounded flex items-center justify-center">
-                  <span className="text-[8px] font-bold text-orange-500">
-                    MC
-                  </span>
-                </div>
-                {settings.enableCOD && (
-                  <div className="w-8 h-5 bg-white rounded flex items-center justify-center">
-                    <span className="text-[8px] font-bold text-dark-700">
-                      COD
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+            <PaymentMethods
+              includeCOD={settings.enableCOD}
+              labelClassName="text-dark-500"
+            />
 
             {/* Legal Links */}
             <div className="flex items-center gap-3 text-xs text-dark-500">
@@ -343,14 +311,14 @@ export function Footer() {
                 href="/privacy"
                 className="hover:text-white transition-colors"
               >
-                Privacy
+                {t("footer.privacyShort")}
               </Link>
               <span>&bull;</span>
               <Link
                 href="/terms"
                 className="hover:text-white transition-colors"
               >
-                Terms
+                {t("footer.termsShort")}
               </Link>
             </div>
           </div>

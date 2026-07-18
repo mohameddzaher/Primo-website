@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { brandsApi } from '@/lib/api';
+import { useT } from '@/lib/i18n';
 
 // Local brand images mapping (name lowercase -> path)
 const localBrandImages: Record<string, string> = {
@@ -78,6 +79,7 @@ function resolveLogo(name: string, apiLogo?: string): string {
 }
 
 export function Brands() {
+  const t = useT();
   const { data: apiBrands } = useQuery({
     queryKey: ['brands-homepage'],
     queryFn: () => brandsApi.getAll(),
@@ -113,11 +115,14 @@ export function Brands() {
           viewport={{ once: true }}
           className="text-center text-sm font-medium text-dark-600 mb-6 uppercase tracking-wider"
         >
-          Authorized Retailer of Premium Brands
+          {t('home.brandsHeading')}
         </motion.p>
       </div>
 
-      <div className="relative">
+      {/* Edge fades are symmetric, so the physical left/right offsets read the
+          same in RTL. The marquee itself is a seamless loop of a duplicated
+          list and stays continuous in either direction. */}
+      <div className="relative" dir="ltr">
         <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-beige-50 to-transparent z-10 pointer-events-none" />
         <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-beige-50 to-transparent z-10 pointer-events-none" />
 
@@ -127,7 +132,8 @@ export function Brands() {
               key={`${brand.name}-${index}`}
               href={`/products?brand=${encodeURIComponent(brand.name)}`}
               className="flex-shrink-0 flex items-center justify-center w-28 md:w-36 h-16 mx-4 opacity-100 hover:opacity-80 transition-all duration-300"
-              title={`Shop ${brand.name}`}
+              title={t('home.shopBrand', { brand: brand.name })}
+              aria-label={t('home.shopBrand', { brand: brand.name })}
             >
               <BrandImage src={brand.logo} alt={brand.name} />
             </a>

@@ -14,6 +14,8 @@ import {
   HiOutlineRefresh,
   HiOutlineDownload,
   HiOutlinePrinter,
+  HiOutlineTruck,
+  HiOutlineExternalLink,
 } from 'react-icons/hi';
 import { Button, Card, ConfirmModal } from '@/components/ui';
 import { ordersApi, cartApi } from '@/lib/api';
@@ -123,11 +125,11 @@ export default function OrderDetailPage() {
           <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:center;font-size:14px;color:#333;">${item.quantity}</td>
           <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;font-size:14px;color:#333;">
             ${hasDiscount
-              ? `<span style="text-decoration:line-through;color:#999;font-size:12px;">EGP ${item.originalPrice?.toLocaleString()}</span><br>EGP ${item.price?.toLocaleString()} <span style="color:#dc2626;font-size:11px;">(-${item.discount}%)</span>`
-              : `EGP ${item.price?.toLocaleString()}`
+              ? `<span style="text-decoration:line-through;color:#999;font-size:12px;">SAR ${item.originalPrice?.toLocaleString()}</span><br>SAR ${item.price?.toLocaleString()} <span style="color:#dc2626;font-size:11px;">(-${item.discount}%)</span>`
+              : `SAR ${item.price?.toLocaleString()}`
             }
           </td>
-          <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;font-size:14px;font-weight:600;color:#333;">EGP ${lineTotal.toLocaleString()}</td>
+          <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;font-size:14px;font-weight:600;color:#333;">SAR ${lineTotal.toLocaleString()}</td>
         </tr>`;
     }).join('') || '';
 
@@ -213,12 +215,12 @@ export default function OrderDetailPage() {
 
       <div class="summary">
         <div class="summary-table">
-          <div class="summary-row"><span>Subtotal</span><span>EGP ${order.subtotal?.toLocaleString()}</span></div>
-          ${order.discount > 0 ? `<div class="summary-row discount"><span>Discount${order.discountCode ? ` (${order.discountCode})` : ''}</span><span>-EGP ${order.discount?.toLocaleString()}</span></div>` : ''}
-          <div class="summary-row"><span>Shipping</span><span>${order.shippingCost === 0 ? 'Free' : `EGP ${order.shippingCost?.toLocaleString()}`}</span></div>
-          ${order.taxAmount > 0 ? `<div class="summary-row"><span>${order.taxLabel || 'VAT'} (${order.taxRate}%)</span><span>EGP ${order.taxAmount?.toLocaleString()}</span></div>` : ''}
-          <div class="summary-row total"><span>Total</span><span>EGP ${order.total?.toLocaleString()}</span></div>
-          ${order.taxAmount > 0 ? `<div style="text-align:right;font-size:11px;color:#888;margin-top:4px;">Includes ${order.taxLabel || 'VAT'} (${order.taxRate}%): EGP ${order.taxAmount?.toLocaleString()}</div>` : ''}
+          <div class="summary-row"><span>Subtotal</span><span>SAR ${order.subtotal?.toLocaleString()}</span></div>
+          ${order.discount > 0 ? `<div class="summary-row discount"><span>Discount${order.discountCode ? ` (${order.discountCode})` : ''}</span><span>-SAR ${order.discount?.toLocaleString()}</span></div>` : ''}
+          <div class="summary-row"><span>Shipping</span><span>${order.shippingCost === 0 ? 'Free' : `SAR ${order.shippingCost?.toLocaleString()}`}</span></div>
+          ${order.taxAmount > 0 ? `<div class="summary-row"><span>${order.taxLabel || 'VAT'} (${order.taxRate}%)</span><span>SAR ${order.taxAmount?.toLocaleString()}</span></div>` : ''}
+          <div class="summary-row total"><span>Total</span><span>SAR ${order.total?.toLocaleString()}</span></div>
+          ${order.taxAmount > 0 ? `<div style="text-align:right;font-size:11px;color:#888;margin-top:4px;">Includes ${order.taxLabel || 'VAT'} (${order.taxRate}%): SAR ${order.taxAmount?.toLocaleString()}</div>` : ''}
         </div>
       </div>
     </div>
@@ -478,24 +480,24 @@ export default function OrderDetailPage() {
                       <div className="text-sm text-dark-500">
                         {item.discount && item.discount > 0 ? (
                           <span>
-                            Price: <span className="line-through text-dark-400">EGP {item.originalPrice?.toLocaleString()}</span>
+                            Price: <span className="line-through text-dark-400">SAR {item.originalPrice?.toLocaleString()}</span>
                             {' '}
-                            <span className="text-green-700 font-medium">EGP {item.price?.toLocaleString()}</span>
+                            <span className="text-green-700 font-medium">SAR {item.price?.toLocaleString()}</span>
                             {' '}
                             <span className="text-xs px-1 py-0.5 bg-red-100 text-red-700 rounded">-{item.discount}%</span>
                           </span>
                         ) : (
-                          <span>Price: EGP {item.price?.toLocaleString()}</span>
+                          <span>Price: SAR {item.price?.toLocaleString()}</span>
                         )}
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-dark-900">
-                        EGP {((item.price || 0) * (item.quantity || 1)).toLocaleString()}
+                        SAR {((item.price || 0) * (item.quantity || 1)).toLocaleString()}
                       </p>
                       {item.discount && item.discount > 0 && (
                         <p className="text-xs text-green-600">
-                          Saved EGP {(((item.originalPrice || 0) - (item.price || 0)) * (item.quantity || 1)).toLocaleString()}
+                          Saved SAR {(((item.originalPrice || 0) - (item.price || 0)) * (item.quantity || 1)).toLocaleString()}
                         </p>
                       )}
                     </div>
@@ -521,7 +523,7 @@ export default function OrderDetailPage() {
               <div className="space-y-3">
                 <div className="flex justify-between text-dark-600">
                   <span>Subtotal</span>
-                  <span>EGP {order.subtotal?.toLocaleString()}</span>
+                  <span>SAR {order.subtotal?.toLocaleString()}</span>
                 </div>
                 {order.discount > 0 && (
                   <div className="flex justify-between text-success-600">
@@ -533,7 +535,7 @@ export default function OrderDetailPage() {
                         </span>
                       )}
                     </span>
-                    <span>-EGP {order.discount?.toLocaleString()}</span>
+                    <span>-SAR {order.discount?.toLocaleString()}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-dark-600">
@@ -541,7 +543,7 @@ export default function OrderDetailPage() {
                   <span>
                     {order.shippingCost === 0
                       ? 'Free'
-                      : `EGP ${order.shippingCost?.toLocaleString()}`}
+                      : `SAR ${order.shippingCost?.toLocaleString()}`}
                   </span>
                 </div>
                 {order.taxAmount > 0 && (
@@ -549,23 +551,98 @@ export default function OrderDetailPage() {
                     <span>
                       {order.taxLabel || 'VAT'} ({order.taxRate}%)
                     </span>
-                    <span>EGP {order.taxAmount?.toLocaleString()}</span>
+                    <span>SAR {order.taxAmount?.toLocaleString()}</span>
                   </div>
                 )}
                 <div className="border-t border-beige-200 pt-3">
                   <div className="flex justify-between text-lg font-semibold text-dark-900">
                     <span>Total</span>
-                    <span>EGP {order.total?.toLocaleString()}</span>
+                    <span>SAR {order.total?.toLocaleString()}</span>
                   </div>
                   {order.taxAmount > 0 && (
                     <p className="text-xs text-dark-400 mt-1">
-                      Includes {order.taxLabel || 'VAT'} ({order.taxRate}%): EGP {order.taxAmount?.toLocaleString()}
+                      Includes {order.taxLabel || 'VAT'} ({order.taxRate}%): SAR {order.taxAmount?.toLocaleString()}
                     </p>
                   )}
                 </div>
               </div>
             </Card>
           </motion.div>
+
+          {/* Shipment Tracking */}
+          {order.shipment?.trackingNumber && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+            >
+              <Card padding="lg">
+                <div className="flex items-center gap-2 mb-4">
+                  <HiOutlineTruck className="text-primary-600" size={20} />
+                  <h2 className="text-lg font-semibold text-dark-900">
+                    Shipment Tracking
+                  </h2>
+                </div>
+                <div className="space-y-3">
+                  {order.shipment.carrier && (
+                    <div className="flex justify-between gap-3 text-dark-600">
+                      <span>Carrier</span>
+                      <span className="font-medium text-dark-900">
+                        {order.shipment.carrier}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-3 text-dark-600">
+                    <span>Tracking Number</span>
+                    <span className="font-medium text-dark-900 break-all text-right">
+                      {order.shipment.trackingNumber}
+                    </span>
+                  </div>
+                  {order.shipment.shippedAt && (
+                    <div className="flex justify-between gap-3 text-dark-600">
+                      <span>Shipped On</span>
+                      <span className="font-medium text-dark-900">
+                        {new Date(order.shipment.shippedAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {order.shipment.estimatedDelivery && (
+                    <div className="flex justify-between gap-3 text-dark-600">
+                      <span>Estimated Delivery</span>
+                      <span className="font-medium text-dark-900">
+                        {new Date(order.shipment.estimatedDelivery).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {order.shipment.trackingUrl && (
+                    <a
+                      href={order.shipment.trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block pt-1 print:hidden"
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        rightIcon={<HiOutlineExternalLink size={16} />}
+                      >
+                        Track Shipment
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Shipping Address */}
           <motion.div

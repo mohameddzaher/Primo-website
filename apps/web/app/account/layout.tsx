@@ -14,24 +14,29 @@ import {
   HiOutlineLockClosed,
   HiOutlineLogout,
   HiOutlineStar,
+  HiOutlineRefresh,
 } from 'react-icons/hi';
 import { useAuthStore, useCartStore } from '@/lib/store';
 import { authApi, setAccessToken } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
+import type { TranslationKey } from '@/lib/i18n';
 import toast from 'react-hot-toast';
 
-const sidebarLinks = [
-  { href: '/account/profile', label: 'My Profile', icon: HiOutlineUser },
-  { href: '/account/orders', label: 'My Orders', icon: HiOutlineShoppingBag },
-  { href: '/account/cart', label: 'My Cart', icon: HiOutlineShoppingCart },
-  { href: '/account/wishlist', label: 'Wishlist', icon: HiOutlineHeart },
-  { href: '/account/addresses', label: 'Addresses', icon: HiOutlineLocationMarker },
-  { href: '/account/points', label: 'My Points', icon: HiOutlineStar },
-  { href: '/account/referrals', label: 'Refer & Earn', icon: HiOutlineUserAdd },
-  { href: '/account/change-password', label: 'Change Password', icon: HiOutlineLockClosed },
+const sidebarLinks: { href: string; labelKey: TranslationKey; icon: any }[] = [
+  { href: '/account/profile', labelKey: 'account.myProfile', icon: HiOutlineUser },
+  { href: '/account/orders', labelKey: 'account.myOrders', icon: HiOutlineShoppingBag },
+  { href: '/account/returns', labelKey: 'account.returns', icon: HiOutlineRefresh },
+  { href: '/cart', labelKey: 'account.myCart', icon: HiOutlineShoppingCart },
+  { href: '/account/wishlist', labelKey: 'nav.wishlist', icon: HiOutlineHeart },
+  { href: '/account/addresses', labelKey: 'account.addresses', icon: HiOutlineLocationMarker },
+  { href: '/account/points', labelKey: 'account.myPoints', icon: HiOutlineStar },
+  { href: '/account/referrals', labelKey: 'account.referrals', icon: HiOutlineUserAdd },
+  { href: '/account/change-password', labelKey: 'account.changePassword', icon: HiOutlineLockClosed },
 ];
 
 export default function AccountLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { t, isRtl } = useI18n();
   const router = useRouter();
   const { user, isLoading, setUser } = useAuthStore();
   const { items: cartItems } = useCartStore();
@@ -47,10 +52,10 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
       await authApi.logout();
       setAccessToken(null);
       setUser(null);
-      toast.success('Logged out successfully');
+      toast.success(t('shop.toast.loggedOut'));
       router.push('/');
     } catch (error) {
-      toast.error('Failed to logout');
+      toast.error(t('shop.toast.logoutFailed'));
     }
   };
 
@@ -73,7 +78,7 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
           {/* Sidebar */}
           <div className="lg:col-span-1">
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
               animate={{ opacity: 1, x: 0 }}
               className="bg-white rounded-xl shadow-soft p-6"
             >
@@ -91,9 +96,9 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
               {/* Navigation */}
               <nav className="space-y-1">
                 {sidebarLinks.map((link) => {
-                  const isActive = pathname === link.href || (link.href === '/account/cart' && pathname === '/account/cart');
+                  const isActive = pathname === link.href || (link.href === '/cart' && pathname === '/cart');
                   const Icon = link.icon;
-                  const isCart = link.href === '/account/cart';
+                  const isCart = link.href === '/cart';
                   return (
                     <Link
                       key={link.href}
@@ -105,9 +110,9 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
                       }`}
                     >
                       <Icon size={20} />
-                      <span className="font-medium">{link.label}</span>
+                      <span className="font-medium">{t(link.labelKey)}</span>
                       {isCart && cartItems.length > 0 && (
-                        <span className="ml-auto px-1.5 py-0.5 text-xs bg-primary-100 text-primary-600 rounded-full">
+                        <span className="ms-auto px-1.5 py-0.5 text-xs bg-primary-100 text-primary-600 rounded-full ltr-nums">
                           {cartItems.reduce((acc, item) => acc + item.quantity, 0)}
                         </span>
                       )}
@@ -119,7 +124,7 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-error-600 hover:bg-error-50 transition-colors"
                 >
                   <HiOutlineLogout size={20} />
-                  <span className="font-medium">Logout</span>
+                  <span className="font-medium">{t('nav.logout')}</span>
                 </button>
               </nav>
             </motion.div>

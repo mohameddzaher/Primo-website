@@ -39,6 +39,9 @@ import settingsRoutes from './routes/settings.routes';
 import inventoryRoutes from './routes/inventory.routes';
 import accountingRoutes from './routes/accounting.routes';
 import seoRoutes from './routes/seo.routes';
+import returnsRoutes from './routes/returns.routes';
+import paymentsRoutes from './routes/payments.routes';
+import { mongoSanitize } from './middleware/validate';
 
 // Validate configuration
 validateConfig();
@@ -67,6 +70,10 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
+// Strip MongoDB operators ($ne, $gt, dotted paths) from all user input before
+// it can reach a query. Applies to every route, including those without zod.
+app.use(mongoSanitize);
 
 // Compression
 app.use(compression());
@@ -153,6 +160,8 @@ app.use(`${API_PREFIX}/referrals`, referralsRoutes);
 app.use(`${API_PREFIX}/brands`, brandsRoutes);
 app.use(`${API_PREFIX}/loyalty`, loyaltyRoutes);
 app.use(`${API_PREFIX}/settings`, settingsRoutes);
+app.use(`${API_PREFIX}/returns`, returnsRoutes);
+app.use(`${API_PREFIX}/payments`, paymentsRoutes);
 app.use(`${API_PREFIX}/admin/inventory`, inventoryRoutes);
 app.use(`${API_PREFIX}/admin/accounting`, accountingRoutes);
 app.use(`${API_PREFIX}/admin/seo`, seoRoutes);

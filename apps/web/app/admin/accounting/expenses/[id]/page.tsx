@@ -205,7 +205,7 @@ export default function EditExpensePage() {
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
-                    label="Amount (EGP)"
+                    label="Amount (SAR)"
                     type="number"
                     placeholder="0.00"
                     value={amount}

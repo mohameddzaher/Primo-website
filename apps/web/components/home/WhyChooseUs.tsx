@@ -1,8 +1,8 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
-import { cmsApi } from '@/lib/api';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 const defaultData = {
   badge: 'Why Shop With Us',
@@ -11,7 +11,7 @@ const defaultData = {
   reasons: [
     { icon: '✅', title: '100% Authentic Products', description: 'We are an authorized retailer for all brands. Every product comes with official warranty and original packaging.' },
     { icon: '💰', title: 'Best Price Guarantee', description: 'Find a lower price elsewhere? We will match it. Plus, enjoy exclusive discounts and member benefits.' },
-    { icon: '🚀', title: 'Fast & Free Delivery', description: 'Free shipping on orders over EGP 2,000. Express delivery available for Cairo and Alexandria.' },
+    { icon: '🚀', title: 'Fast & Free Delivery', description: 'Free shipping on orders over SAR 500. Express delivery available across Riyadh and Jeddah.' },
     { icon: '🛡️', title: 'Extended Warranty', description: 'Get up to 2 years warranty on all products. Our extended warranty covers parts and labor costs.' },
     { icon: '↩️', title: 'Easy Returns', description: '30-day hassle-free returns. Not satisfied? Return it for a full refund, no questions asked.' },
     { icon: '💬', title: '24/7 Expert Support', description: 'Our dedicated team of experts is available around the clock to help you with any questions.' },
@@ -19,18 +19,15 @@ const defaultData = {
   cta: {
     title: 'Still Have Questions?',
     description: 'Our customer support team is here to help. Contact us anytime via phone, email, or live chat.',
-    phone: '+20 123 456 789',
+    phone: '+966 11 234 5678',
     buttonText: 'Send a Message',
     buttonLink: '/contact',
   },
 };
 
 export function WhyChooseUs() {
-  const { data: cmsData } = useQuery({
-    queryKey: ['cms-homepage-why-choose-us'],
-    queryFn: () => cmsApi.getContent('homepage_why_choose_us'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const t = useT();
+  const { data: cmsData } = useCmsContent('homepage_why_choose_us');
 
   let content = defaultData;
   try {
@@ -118,7 +115,7 @@ export function WhyChooseUs() {
               href={`tel:${content.cta.phone.replace(/\s/g, '')}`}
               className="inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-600 rounded-lg font-medium hover:bg-white/90 transition-colors"
             >
-              Call Us: {content.cta.phone}
+              {t('home.callUs')}: <span className="ltr-nums">{content.cta.phone}</span>
             </a>
             <a
               href={content.cta.buttonLink}

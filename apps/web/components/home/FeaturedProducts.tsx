@@ -8,8 +8,10 @@ import { productsApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-client';
 import { ProductCard } from '@/components/product/ProductCard';
 import { Button, ProductGridSkeleton } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 export function FeaturedProducts() {
+  const t = useT();
   const { data: products, isLoading } = useQuery({
     queryKey: queryKeys.products.featured(),
     queryFn: productsApi.getFeatured,
@@ -27,7 +29,7 @@ export function FeaturedProducts() {
               viewport={{ once: true }}
               className="text-sm text-primary-400 font-medium uppercase tracking-wider"
             >
-              Hand-picked for you
+              {t('home.featuredSubtitle')}
             </motion.span>
             <motion.h2
               initial={{ opacity: 0, y: 10 }}
@@ -36,7 +38,7 @@ export function FeaturedProducts() {
               transition={{ delay: 0.1 }}
               className="mt-2 text-3xl md:text-4xl font-display font-semibold text-white"
             >
-              Featured Products
+              {t('home.featuredProducts')}
             </motion.h2>
           </div>
           <motion.div
@@ -46,8 +48,8 @@ export function FeaturedProducts() {
             transition={{ delay: 0.2 }}
           >
             <Link href="/products?featured=true">
-              <Button variant="ghost" rightIcon={<HiArrowRight size={16} />} className="text-white hover:bg-white/10">
-                View All
+              <Button variant="ghost" rightIcon={<HiArrowRight size={16} className="rtl-flip" />} className="text-white hover:bg-white/10">
+                {t('common.viewAll')}
               </Button>
             </Link>
           </motion.div>

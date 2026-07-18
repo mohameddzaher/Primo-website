@@ -3,7 +3,7 @@ import PolicyPageContent from '@/components/PolicyPageContent';
 
 export const metadata: Metadata = {
   title: 'Shipping Information | PRIMO',
-  description: 'PRIMO shipping policy: delivery areas, shipping rates, order processing times, tracking information, and delivery instructions across Egypt.',
+  description: 'PRIMO shipping policy: delivery areas, shipping rates, order processing times, tracking information, and delivery instructions across Saudi Arabia.',
   openGraph: {
     title: 'Shipping Information | PRIMO',
     description: 'Learn about PRIMO delivery areas, shipping rates, and tracking.',

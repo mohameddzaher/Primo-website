@@ -22,7 +22,7 @@ const values = [
     icon: HiOutlineTruck,
     title: 'Fast Delivery',
     description:
-      'Enjoy quick and reliable delivery across Egypt with real-time tracking.',
+      'Enjoy quick and reliable delivery across Saudi Arabia with real-time tracking.',
   },
   {
     icon: HiOutlineSupport,
@@ -80,7 +80,8 @@ export default function AboutPageContent() {
             </h1>
             <p className="text-xl text-primary-100 leading-relaxed">
               We're on a mission to bring premium home appliances to every
-              household in Egypt, making quality accessible and affordable.
+              household in Saudi Arabia, making quality accessible and
+              affordable.
             </p>
           </motion.div>
         </div>
@@ -105,9 +106,9 @@ export default function AboutPageContent() {
                   bank.
                 </p>
                 <p>
-                  What began as a small online store has grown into one of Egypt's
-                  leading e-commerce platforms for home appliances, serving
-                  thousands of customers across the country.
+                  What began as a small online store has grown into one of Saudi
+                  Arabia's leading e-commerce platforms for home appliances,
+                  serving thousands of customers across the Kingdom.
                 </p>
                 <p>
                   Today, we partner with over 100 trusted brands to bring you a
@@ -182,7 +183,7 @@ export default function AboutPageContent() {
             </h2>
             <p className="text-dark-500 max-w-2xl mx-auto">
               We're committed to providing the best shopping experience for home
-              appliances in Egypt.
+              appliances in Saudi Arabia.
             </p>
           </motion.div>
 

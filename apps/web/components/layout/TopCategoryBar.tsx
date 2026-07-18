@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { categoriesApi, cmsApi } from '@/lib/api';
+import { categoriesApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useCmsContent } from '@/lib/use-cms-content';
+import { useT } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
   try {
@@ -16,6 +18,7 @@ function parseCmsJson(data: any, fallback: any) {
 }
 
 export function TopCategoryBar() {
+  const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeCategoryId = searchParams.get('category') || '';
@@ -26,11 +29,7 @@ export function TopCategoryBar() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: settingsCms } = useQuery({
-    queryKey: ['cms-homepage_topbar_settings'],
-    queryFn: () => cmsApi.getContent('homepage_topbar_settings'),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: settingsCms } = useCmsContent('homepage_topbar_settings');
 
   const settings = parseCmsJson(settingsCms, { enabled: true });
 
@@ -65,7 +64,7 @@ export function TopCategoryBar() {
                 : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
             )}
           >
-            All Products
+            {t('home.allProducts')}
           </Link>
 
           <div className="h-3 w-px bg-beige-200 flex-shrink-0" />
@@ -90,6 +89,37 @@ export function TopCategoryBar() {
               </Link>
             );
           })}
+
+          {/* Campaign entry points live here alongside the categories — they are
+              navigation, not merchandising, so they belong in the header rather
+              than as a separate strip pushing the hero artwork down the page. */}
+          <div className="h-3 w-px bg-beige-200 flex-shrink-0" />
+
+          <Link
+            href="/products?onSale=true"
+            className={cn(
+              'flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
+              searchParams.get('onSale')
+                ? 'text-primary-600 border-primary-600'
+                : 'text-error-600 border-transparent hover:border-error-400'
+            )}
+          >
+            <span className="text-sm">🏷️</span>
+            {t('home.onSale')}
+          </Link>
+
+          <Link
+            href="/products?newArrivals=true"
+            className={cn(
+              'flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
+              searchParams.get('newArrivals')
+                ? 'text-primary-600 border-primary-600'
+                : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
+            )}
+          >
+            <span className="text-sm">✨</span>
+            {t('home.newArrivals')}
+          </Link>
         </div>
       </div>
     </div>

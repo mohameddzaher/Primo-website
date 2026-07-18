@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter, Outfit } from 'next/font/google';
+import { Inter, Outfit, Tajawal } from 'next/font/google';
 import { Providers } from '@/components/Providers';
 import { ConditionalLayout } from '@/components/layout';
 import '@/styles/globals.css';
@@ -16,6 +16,15 @@ const outfit = Outfit({
   display: 'swap',
 });
 
+// Arabic typeface — Inter/Outfit have no Arabic glyphs, so without this the RTL
+// locale would fall back to a system font and look broken next to the Latin UI.
+const tajawal = Tajawal({
+  subsets: ['arabic'],
+  weight: ['400', '500', '700'],
+  variable: '--font-arabic',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
   title: {
@@ -23,20 +32,24 @@ export const metadata: Metadata = {
     template: '%s | PRIMO',
   },
   description:
-    'Discover premium home appliances at PRIMO. Shop kitchen appliances, coffee machines, small appliances, and home essentials with free shipping on orders over EGP 2,000.',
+    'Discover premium home appliances at PRIMO. Shop kitchen appliances, coffee machines, small appliances, and home essentials with free shipping on orders over SAR 500.',
   keywords: [
     'home appliances',
     'kitchen appliances',
     'coffee machines',
     'small appliances',
     'premium appliances',
-    'Egypt',
+    'Saudi Arabia',
+    'Riyadh',
+    'مكيفات',
+    'أجهزة منزلية',
   ],
   authors: [{ name: 'PRIMO' }],
   creator: 'PRIMO',
   openGraph: {
     type: 'website',
-    locale: 'en_US',
+    locale: 'en_SA',
+    alternateLocale: ['ar_SA'],
     url: 'https://primo.com',
     siteName: 'PRIMO',
     title: 'PRIMO - Premium Home Appliances',
@@ -84,7 +97,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
+    // lang/dir are updated on the client by I18nProvider when the visitor picks
+    // a locale, so React must not warn about the attribute mismatch.
+    <html
+      lang="en"
+      dir="ltr"
+      suppressHydrationWarning
+      className={`${inter.variable} ${outfit.variable} ${tajawal.variable}`}
+    >
       <body className="min-h-screen bg-beige-50 font-sans antialiased">
         <Providers>
           <ConditionalLayout>{children}</ConditionalLayout>

@@ -9,9 +9,13 @@ import { z } from 'zod';
 import { Testimonial } from '../models/Testimonial';
 import { authenticate, requireAdmin, requireSuperAdmin, AuthRequest, optionalAuth } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
 const router = Router();
+
+// Writes here clear the matching cached public responses
+router.use(invalidateOnWrite('testimonials'));
 
 // Validation schemas
 const createTestimonialSchema = z.object({

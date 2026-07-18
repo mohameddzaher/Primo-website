@@ -20,14 +20,19 @@ import { Order } from '../models/Order';
 import { StockMovement } from '../models/StockMovement';
 import { authenticate, optionalAuth, requireAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
 const router = Router();
+
+// Product writes clear cached product + category listings
+router.use(invalidateOnWrite('products', 'categories'));
 
 // Get all products (public)
 router.get(
   '/',
   validate(paginationSchema, 'query'),
+  cacheResponse('products', 60),
   optionalAuth,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { page = 1, limit = 20 } = req.query as any;
@@ -218,6 +223,7 @@ router.get(
 // Get featured products
 router.get(
   '/featured',
+  cacheResponse('products', 60),
   asyncHandler(async (_req: AuthRequest, res: Response) => {
     const rawProducts = await Product.find({ isActive: true, isFeatured: true })
       .sort({ soldCount: -1 })
@@ -240,6 +246,7 @@ router.get(
 // Get product brands
 router.get(
   '/brands',
+  cacheResponse('products', 300),
   asyncHandler(async (_req: AuthRequest, res: Response) => {
     const brands = await Product.distinct('brand', { isActive: true });
 
@@ -271,7 +278,9 @@ router.get(
 
     // Get related products (manually assigned or auto-generated)
     let relatedProducts: any[] = [];
-    const relatedSelect = 'title slug brand price compareAtPrice discount discountEndsAt images averageRating reviewCount stockQuantity';
+    // `variants` is included so ProductCard can show the "N options" hint on the
+    // related-products rail without a second round-trip.
+    const relatedSelect = 'title slug brand price compareAtPrice discount discountEndsAt images averageRating reviewCount stockQuantity variants';
 
     if (product.relatedProductIds && product.relatedProductIds.length > 0) {
       relatedProducts = await Product.find({

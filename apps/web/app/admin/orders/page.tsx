@@ -198,7 +198,7 @@ export default function AdminOrdersPage() {
                       </select>
                     </td>
                     <td className="px-6 py-4 font-medium text-dark-900">
-                      EGP {order.total?.toLocaleString()}
+                      SAR {order.total?.toLocaleString()}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link href={`/admin/orders/${order._id}`}>

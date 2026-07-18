@@ -6,7 +6,7 @@ import { cmsApi } from '@/lib/api';
 
 const fallbackContent = `
 <h2>Join Our Team</h2>
-<p>At PRIMO, we're building the future of home appliance e-commerce in Egypt. We're looking for passionate, talented individuals who want to make a real impact.</p>
+<p>At PRIMO, we're building the future of home appliance e-commerce in Saudi Arabia. We're looking for passionate, talented individuals who want to make a real impact.</p>
 
 <h2>Why Work at PRIMO?</h2>
 <ul>

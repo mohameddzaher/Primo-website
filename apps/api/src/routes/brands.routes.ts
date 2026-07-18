@@ -9,13 +9,18 @@ import { Brand } from '../models/Brand';
 import { Product } from '../models/Product';
 import { authenticate, requireAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
 const router = Router();
 
+// Writes here clear the matching cached public responses
+router.use(invalidateOnWrite('brands','products'));
+
 // Get all brands (public)
 router.get(
   '/',
+  cacheResponse('brands', 300),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { all } = req.query;
 

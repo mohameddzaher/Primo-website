@@ -7,9 +7,13 @@ import { z } from 'zod';
 import { Settings } from '../models/Settings';
 import { authenticate, requireSuperAdmin, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
+
+// Writes here clear the matching cached public responses
+router.use(invalidateOnWrite('settings'));
 
 // Public settings schema - only non-sensitive fields
 const publicSettingsFields = [
@@ -33,6 +37,10 @@ const publicSettingsFields = [
   'enableCOD',
   'codFee',
   'enableOnlinePayment',
+  'sellerName',
+  'sellerVatNumber',
+  'sellerCrNumber',
+  'sellerAddress',
   'socialFacebook',
   'socialInstagram',
   'socialTwitter',
@@ -66,6 +74,7 @@ const publicSettingsFields = [
 // Get public settings (no auth required)
 router.get(
   '/public',
+  cacheResponse('settings', 120),
   asyncHandler(async (_req: AuthRequest, res: Response) => {
     const settings = await (Settings as any).getSettings();
 
@@ -142,6 +151,12 @@ const updateSettingsSchema = z.object({
   paypalEnabled: z.boolean().optional(),
   paypalClientId: z.string().optional(),
   paypalSecret: z.string().optional(),
+  // Tax / Invoicing (ZATCA e-invoicing seller identity)
+  sellerName: z.string().max(200).optional(),
+  // Empty is allowed so the field can be left unset; when filled ZATCA requires 15 digits.
+  sellerVatNumber: z.string().regex(/^\d{15}$/).or(z.literal('')).optional(),
+  sellerCrNumber: z.string().max(50).optional(),
+  sellerAddress: z.string().max(500).optional(),
   // Email
   smtpHost: z.string().optional(),
   smtpPort: z.number().optional(),

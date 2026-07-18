@@ -129,11 +129,11 @@ export default function AdminOffersPage() {
                       <span className="font-medium text-dark-900">
                         {offer.type === 'percentage'
                           ? `${offer.value}%`
-                          : `EGP ${offer.value}`}
+                          : `SAR ${offer.value}`}
                       </span>
                       {offer.minOrderAmount && (
                         <p className="text-sm text-dark-500">
-                          Min: EGP {offer.minOrderAmount}
+                          Min: SAR {offer.minOrderAmount}
                         </p>
                       )}
                     </td>

@@ -11,19 +11,26 @@ import { HiOutlineMail, HiOutlineLockClosed } from 'react-icons/hi';
 import { FcGoogle } from 'react-icons/fc';
 import { Button, Input, Card } from '@/components/ui';
 import { authApi, setAccessToken } from '@/lib/api';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, syncWishlistWithServer } from '@/lib/store';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { useT } from '@/lib/i18n';
+import type { TranslationKey } from '@/lib/i18n';
 import toast from 'react-hot-toast';
 
-const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
-  password: z.string().min(1, 'Password is required'),
-});
+type Translate = (key: TranslationKey, vars?: Record<string, string | number>) => string;
 
-type LoginForm = z.infer<typeof loginSchema>;
+// Built per-render so validation messages follow the active locale.
+const buildLoginSchema = (t: Translate) =>
+  z.object({
+    email: z.string().email(t('shop.validation.emailInvalid')),
+    password: z.string().min(1, t('shop.validation.passwordRequired')),
+  });
+
+type LoginForm = z.infer<ReturnType<typeof buildLoginSchema>>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useT();
   const { setUser } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -32,7 +39,7 @@ export default function LoginPage() {
     handleSubmit,
     formState: { errors },
   } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(buildLoginSchema(t)),
   });
 
   const onSubmit = async (data: LoginForm) => {
@@ -41,7 +48,9 @@ export default function LoginPage() {
       const response = await authApi.login(data);
       setAccessToken(response.accessToken);
       setUser(response.user);
-      toast.success('Welcome back!');
+      // Merge any guest wishlist into the account, then reload from server
+      await syncWishlistWithServer();
+      toast.success(t('auth.welcomeBack'));
 
       // Redirect based on role
       if (response.user.role === 'super_admin' || response.user.role === 'admin') {
@@ -50,7 +59,7 @@ export default function LoginPage() {
         router.push('/');
       }
     } catch (error: any) {
-      toast.error(getApiErrorMessage(error, 'Failed to login'));
+      toast.error(getApiErrorMessage(error, t('shop.toast.loginFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -58,7 +67,7 @@ export default function LoginPage() {
 
   const handleGoogleLogin = () => {
     // In a real app, this would redirect to Google OAuth
-    toast.error('Google login coming soon');
+    toast.error(t('shop.toast.googleSoon'));
   };
 
   return (
@@ -77,10 +86,10 @@ export default function LoginPage() {
               </span>
             </Link>
             <h1 className="mt-4 text-2xl font-semibold text-dark-900">
-              Welcome back
+              {t('auth.welcomeBack')}
             </h1>
             <p className="mt-2 text-sm text-dark-500">
-              Sign in to continue shopping
+              {t('shop.auth.loginSubtitle')}
             </p>
           </div>
 
@@ -91,7 +100,7 @@ export default function LoginPage() {
             className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-beige-300 rounded-lg text-dark-700 font-medium hover:bg-beige-50 transition-colors"
           >
             <FcGoogle size={20} />
-            Continue with Google
+            {t('shop.auth.continueGoogle')}
           </button>
 
           {/* Divider */}
@@ -101,7 +110,7 @@ export default function LoginPage() {
             </div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="px-2 bg-white text-dark-400">
-                or continue with email
+                {t('shop.auth.orContinueEmail')}
               </span>
             </div>
           </div>
@@ -109,7 +118,7 @@ export default function LoginPage() {
           {/* Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Input
-              label="Email"
+              label={t('auth.email')}
               type="email"
               placeholder="you@example.com"
               leftIcon={<HiOutlineMail size={18} />}
@@ -118,9 +127,9 @@ export default function LoginPage() {
             />
 
             <Input
-              label="Password"
+              label={t('auth.password')}
               type="password"
-              placeholder="Enter your password"
+              placeholder={t('shop.auth.passwordPlaceholder')}
               leftIcon={<HiOutlineLockClosed size={18} />}
               error={errors.password?.message}
               {...register('password')}
@@ -132,13 +141,13 @@ export default function LoginPage() {
                   type="checkbox"
                   className="w-4 h-4 rounded border-beige-300 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="text-dark-600">Remember me</span>
+                <span className="text-dark-600">{t('shop.auth.rememberMe')}</span>
               </label>
               <Link
                 href="/auth/forgot-password"
                 className="text-primary-600 hover:text-primary-700 font-medium"
               >
-                Forgot password?
+                {t('auth.forgotPassword')}
               </Link>
             </div>
 
@@ -149,18 +158,18 @@ export default function LoginPage() {
               isLoading={isLoading}
               className="mt-6"
             >
-              Sign In
+              {t('auth.signIn')}
             </Button>
           </form>
 
           {/* Footer */}
           <p className="mt-6 text-center text-sm text-dark-500">
-            Don&apos;t have an account?{' '}
+            {t('auth.noAccount')}{' '}
             <Link
               href="/auth/register"
               className="text-primary-600 hover:text-primary-700 font-medium"
             >
-              Sign up
+              {t('auth.signUp')}
             </Link>
           </p>
         </Card>
@@ -172,8 +181,8 @@ export default function LoginPage() {
           transition={{ delay: 0.3 }}
           className="mt-6 p-4 bg-beige-100 rounded-xl text-center"
         >
-          <p className="text-xs text-dark-500 font-medium mb-2">Demo Accounts:</p>
-          <div className="space-y-1 text-xs text-dark-600">
+          <p className="text-xs text-dark-500 font-medium mb-2">{t('shop.auth.demoAccounts')}</p>
+          <div className="space-y-1 text-xs text-dark-600 ltr-nums">
             <p>Super Admin: admin@primo.com / admin123</p>
             <p>Staff: staff@primo.com / staff123</p>
             <p>User: user@primo.com / user123</p>

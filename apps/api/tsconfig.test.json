@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // @types/jest is hoisted to the monorepo root, but the app tsconfig pins
+    // typeRoots to its own node_modules — so tests need both roots.
+    "typeRoots": ["./node_modules/@types", "../../node_modules/@types"],
+    "types": ["jest", "node"]
+  },
+  "include": ["src/**/*"]
+}
