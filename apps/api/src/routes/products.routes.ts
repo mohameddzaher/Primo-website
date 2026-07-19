@@ -23,6 +23,17 @@ import { validate } from '../middleware/validate';
 import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
+/**
+ * Escape regex metacharacters in user input.
+ *
+ * Without this a shopper typing "(" produces an invalid RegExp (a 500), and a
+ * crafted pattern could be used for a ReDoS. The Mongo-operator sanitiser only
+ * strips `$`-prefixed KEYS — it does not neutralise regex syntax in a VALUE.
+ */
+function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const router = Router();
 
 // Product writes clear cached product + category listings
@@ -41,9 +52,41 @@ router.get(
     // Build query
     const query: any = { isActive: true };
 
-    // Search
+    // Search.
+    //
+    // This used to be `$text`, which only matches WHOLE words: a shopper typing
+    // "brau" got nothing until they finished "braun". Partial matching is what
+    // people expect from a store search box, so match a case-insensitive regex
+    // across the fields a shopper would actually search by.
+    //
+    // Each whitespace-separated token must match somewhere (AND across tokens,
+    // OR across fields), so "braun shaver" narrows rather than widens.
+    //
+    // Written into `$and` rather than `$or` because the on-sale filter below
+    // already owns `query.$or` — assigning it here would silently drop that.
     if (filters.search) {
-      query.$text = { $search: filters.search };
+      const tokens = String(filters.search)
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 6); // cap so a pathological query can't build a huge $and
+
+      const tokenConditions = tokens.map((token) => {
+        const rx = new RegExp(escapeRegex(token), 'i');
+        return {
+          $or: [
+            { title: rx },
+            { brand: rx },
+            { sku: rx },
+            { tags: rx },
+            { shortDescription: rx },
+          ],
+        };
+      });
+
+      if (tokenConditions.length) {
+        query.$and = [...(query.$and || []), ...tokenConditions];
+      }
     }
 
     // Category by slug (resolves slug to ID, includes subcategories)
@@ -190,10 +233,12 @@ router.get(
 
     // Use text search if available, fallback to regex
     if (q.length >= 2) {
+      const safe = escapeRegex(q);
       query.$or = [
-        { title: { $regex: q, $options: 'i' } },
-        { brand: { $regex: q, $options: 'i' } },
-        { tags: { $regex: q, $options: 'i' } },
+        { title: { $regex: safe, $options: 'i' } },
+        { brand: { $regex: safe, $options: 'i' } },
+        { sku: { $regex: safe, $options: 'i' } },
+        { tags: { $regex: safe, $options: 'i' } },
       ];
     }
 
