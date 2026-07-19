@@ -16,6 +16,7 @@ import { authenticate, requireAdmin, requirePermission, AuthRequest } from '../m
 import { validate } from '../middleware/validate';
 import { invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError, ConflictError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/regex';
 
 const router = Router();
 
@@ -268,7 +269,7 @@ router.get(
     }
 
     if (search) {
-      query.orderNumber = { $regex: String(search), $options: 'i' };
+      query.orderNumber = { $regex: escapeRegex(String(search)), $options: 'i' };
     }
 
     const [returns, total] = await Promise.all([

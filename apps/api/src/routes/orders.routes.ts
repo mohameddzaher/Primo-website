@@ -21,6 +21,7 @@ import { validate } from '../middleware/validate';
 import { invalidateOnWrite } from '../middleware/cache';
 import { bookOrderRevenue } from '../services/ledger.service';
 import { asyncHandler, NotFoundError, BadRequestError, ConflictError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/regex';
 import { sendOrderConfirmationEmail, sendOrderStatusEmail } from '../services/email.service';
 import { notifyAdminsNewOrder, notifyOrderStatusChange, notifyAdminsLowStock } from '../services/notification.service';
 import { getOrderStatusLabel } from '@primo/shared';
@@ -344,6 +345,20 @@ router.post(
 
     // Get settings for dynamic shipping and delivery calculation
     const settings = await (Settings as any).getSettings();
+
+    // Enforce the payment-method toggles. The storefront hides a disabled
+    // method, but the server accepted whatever it was sent — so a stale tab or
+    // a direct request could still place, say, a cash-on-delivery order after
+    // the admin had switched COD off.
+    if (paymentMethod === 'cash_on_delivery' && settings.enableCOD === false) {
+      throw new BadRequestError('Cash on delivery is not available at the moment');
+    }
+    if (
+      (paymentMethod === 'card' || paymentMethod === 'apple_pay') &&
+      settings.enableOnlinePayment === false
+    ) {
+      throw new BadRequestError('Online payment is not available at the moment');
+    }
 
     // Check stock and calculate totals
     const orderItems: IOrderItem[] = [];
@@ -887,10 +902,10 @@ router.get(
     // Search filter
     if (filters.search) {
       query.$or = [
-        { orderNumber: { $regex: filters.search, $options: 'i' } },
-        { 'shippingAddress.phone': { $regex: filters.search, $options: 'i' } },
-        { 'shippingAddress.email': { $regex: filters.search, $options: 'i' } },
-        { 'shippingAddress.fullName': { $regex: filters.search, $options: 'i' } },
+        { orderNumber: { $regex: escapeRegex(filters.search), $options: 'i' } },
+        { 'shippingAddress.phone': { $regex: escapeRegex(filters.search), $options: 'i' } },
+        { 'shippingAddress.email': { $regex: escapeRegex(filters.search), $options: 'i' } },
+        { 'shippingAddress.fullName': { $regex: escapeRegex(filters.search), $options: 'i' } },
       ];
     }
 

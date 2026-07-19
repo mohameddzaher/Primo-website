@@ -6,6 +6,7 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import { authenticate, requireAdminOnly, AuthRequest } from '../middleware/auth';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/regex';
 import { SEOPage } from '../models/SEOPage';
 import { SEORedirect } from '../models/SEORedirect';
 import { SEOKeyword } from '../models/SEOKeyword';
@@ -83,8 +84,8 @@ router.get(
 
     if (search) {
       query.$or = [
-        { path: { $regex: search, $options: 'i' } },
-        { metaTitle: { $regex: search, $options: 'i' } },
+        { path: { $regex: escapeRegex(search), $options: 'i' } },
+        { metaTitle: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 
@@ -429,8 +430,8 @@ router.get(
 
     if (search) {
       query.$or = [
-        { fromPath: { $regex: search, $options: 'i' } },
-        { toPath: { $regex: search, $options: 'i' } },
+        { fromPath: { $regex: escapeRegex(search), $options: 'i' } },
+        { toPath: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 
@@ -564,7 +565,7 @@ router.get(
     const query: any = {};
 
     if (search) {
-      query.keyword = { $regex: search, $options: 'i' };
+      query.keyword = { $regex: escapeRegex(search), $options: 'i' };
     }
 
     if (difficulty && ['easy', 'medium', 'hard'].includes(difficulty)) {

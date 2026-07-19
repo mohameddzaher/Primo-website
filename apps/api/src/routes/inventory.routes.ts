@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { authenticate, requireAdminOnly, AuthRequest } from '../middleware/auth';
 import { invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/regex';
 import { Product } from '../models/Product';
 import { StockMovement } from '../models/StockMovement';
 import { Order } from '../models/Order';
@@ -125,8 +126,8 @@ router.get(
     // Search by title or sku
     if (search) {
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { sku: { $regex: search, $options: 'i' } },
+        { title: { $regex: escapeRegex(search), $options: 'i' } },
+        { sku: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 

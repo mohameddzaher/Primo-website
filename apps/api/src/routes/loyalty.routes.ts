@@ -9,6 +9,7 @@ import { Settings } from '../models/Settings';
 import { PointsTransaction } from '../models/PointsTransaction';
 import { authenticate, requireAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/regex';
 
 const router = Router();
 
@@ -189,9 +190,9 @@ router.get(
     const query: any = { role: 'user' };
     if (search) {
       query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+        { lastName: { $regex: escapeRegex(search), $options: 'i' } },
+        { email: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 

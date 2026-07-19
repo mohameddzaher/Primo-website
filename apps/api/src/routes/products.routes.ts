@@ -22,17 +22,7 @@ import { authenticate, optionalAuth, requireAdmin, requirePermission, AuthReques
 import { validate } from '../middleware/validate';
 import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
-
-/**
- * Escape regex metacharacters in user input.
- *
- * Without this a shopper typing "(" produces an invalid RegExp (a 500), and a
- * crafted pattern could be used for a ReDoS. The Mongo-operator sanitiser only
- * strips `$`-prefixed KEYS — it does not neutralise regex syntax in a VALUE.
- */
-function escapeRegex(input: string): string {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { escapeRegex } from '../utils/regex';
 
 const router = Router();
 

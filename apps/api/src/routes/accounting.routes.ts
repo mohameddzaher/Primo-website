@@ -9,6 +9,7 @@ import { Transaction } from '../models/Transaction';
 import { Order } from '../models/Order';
 import { authenticate, requireAdminOnly, AuthRequest } from '../middleware/auth';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/regex';
 
 const router = Router();
 
@@ -220,8 +221,8 @@ router.get(
 
     if (search) {
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { title: { $regex: escapeRegex(search), $options: 'i' } },
+        { description: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 

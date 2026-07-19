@@ -6,6 +6,7 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import { createReviewSchema, moderateReviewSchema, paginationSchema } from '@primo/shared';
 import { Review } from '../models/Review';
+import { Settings } from '../models/Settings';
 import { Product } from '../models/Product';
 import { Order } from '../models/Order';
 import { AuditLog } from '../models/AuditLog';
@@ -210,7 +211,18 @@ router.post(
       throw new BadRequestError('You have already reviewed this product');
     }
 
-    // Create review - auto-approved for immediate display
+    // Respect the moderation settings. These were previously ignored: reviews
+    // were hardcoded to 'approved', so an admin who had switched reviews off —
+    // or who required approval (the default) — still got every review published
+    // instantly, with no way to vet it first.
+    const reviewSettings = await (Settings as any).getSettings();
+
+    if (reviewSettings.enableReviews === false) {
+      throw new ForbiddenError('Reviews are currently disabled');
+    }
+
+    const requiresApproval = reviewSettings.reviewsRequireApproval !== false;
+
     const review = await Review.create({
       productId,
       userId: req.userId,
@@ -220,12 +232,15 @@ router.post(
       title,
       comment,
       images,
-      status: 'approved', // Auto-approve for immediate display
+      status: requiresApproval ? 'pending' : 'approved',
       isVerifiedPurchase: true,
     });
 
-    // Update product rating and review count immediately
-    await syncProductRating(productId);
+    // Only an approved review may move the public rating. A pending one must
+    // not, or moderation would be cosmetic.
+    if (!requiresApproval) {
+      await syncProductRating(productId);
+    }
 
     // Notify admins (they can still delete inappropriate reviews)
     notifyAdminsNewReview(product.title, rating, req.user!.fullName).catch(console.error);
@@ -233,7 +248,9 @@ router.post(
     res.status(201).json({
       success: true,
       data: review,
-      message: 'Review submitted successfully',
+      message: requiresApproval
+        ? 'Review submitted — it will appear once approved by our team'
+        : 'Review submitted successfully',
     });
   })
 );

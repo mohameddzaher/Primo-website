@@ -15,6 +15,7 @@ import { authenticate, requireAdmin, requireSuperAdmin, requirePermission, AuthR
 import { invalidateCache, cacheStats } from '../middleware/cache';
 import { validate } from '../middleware/validate';
 import { asyncHandler, NotFoundError, BadRequestError, ForbiddenError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/regex';
 import * as analyticsService from '../services/analytics.service';
 
 const router = Router();
@@ -373,9 +374,9 @@ router.get(
 
     if (search) {
       query.$or = [
-        { email: { $regex: search, $options: 'i' } },
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: escapeRegex(search), $options: 'i' } },
+        { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+        { lastName: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 
@@ -639,10 +640,10 @@ router.get(
 
     if (search) {
       query.$or = [
-        { email: { $regex: search, $options: 'i' } },
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
+        { email: { $regex: escapeRegex(search), $options: 'i' } },
+        { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+        { lastName: { $regex: escapeRegex(search), $options: 'i' } },
+        { phone: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 

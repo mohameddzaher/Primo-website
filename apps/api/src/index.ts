@@ -42,6 +42,8 @@ import seoRoutes from './routes/seo.routes';
 import returnsRoutes from './routes/returns.routes';
 import paymentsRoutes from './routes/payments.routes';
 import { mongoSanitize } from './middleware/validate';
+import { maintenanceMode } from './middleware/maintenance';
+import { optionalAuth } from './middleware/auth';
 
 // Validate configuration
 validateConfig();
@@ -141,6 +143,12 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // API routes
 const API_PREFIX = `/api/${config.apiVersion}`;
+
+// Refuse state-changing storefront traffic while maintenance mode is on.
+// `optionalAuth` runs first so req.user is resolved here — without it the
+// staff bypass inside maintenanceMode could never match, and enabling
+// maintenance would lock admins out of their own store.
+app.use(API_PREFIX, optionalAuth, maintenanceMode);
 
 app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/products`, productsRoutes);

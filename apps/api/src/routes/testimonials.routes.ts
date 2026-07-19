@@ -11,6 +11,7 @@ import { authenticate, requireAdmin, requireSuperAdmin, AuthRequest, optionalAut
 import { validate } from '../middleware/validate';
 import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
 import { asyncHandler, NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/regex';
 
 const router = Router();
 
@@ -134,9 +135,9 @@ router.get(
 
     if (search) {
       query.$or = [
-        { customerName: { $regex: search, $options: 'i' } },
-        { customerEmail: { $regex: search, $options: 'i' } },
-        { content: { $regex: search, $options: 'i' } },
+        { customerName: { $regex: escapeRegex(search), $options: 'i' } },
+        { customerEmail: { $regex: escapeRegex(search), $options: 'i' } },
+        { content: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 

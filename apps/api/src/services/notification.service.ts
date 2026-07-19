@@ -249,6 +249,15 @@ export const notifyAdminsLowStock = async (
   sku: string,
   currentStock: number
 ): Promise<void> => {
+  // Respect the admin's notification preference. This was previously ignored,
+  // so switching low-stock alerts off in Settings had no effect at all.
+  try {
+    const settings = await (Settings as any).getSettings();
+    if (settings?.notifyOnLowStock === false) return;
+  } catch {
+    // Settings unavailable — default to notifying rather than going silent.
+  }
+
   const admins = await User.find({
     role: { $in: ['admin', 'super_admin'] },
     isActive: true,
