@@ -13,6 +13,7 @@ import { useAuthStore } from '@/lib/store';
 import { Button, Input, Textarea } from '@/components/ui';
 import toast from 'react-hot-toast';
 import { useI18n, type TranslationKey } from '@/lib/i18n';
+import { useSectionHeading } from '@/lib/use-section-heading';
 
 // Built per-render so validation messages follow the active locale.
 function buildTestimonialSchema(t: (key: TranslationKey) => string) {
@@ -125,6 +126,7 @@ function TestimonialSkeleton() {
 
 export function Testimonials() {
   const { t } = useI18n();
+  const heading = useSectionHeading('testimonials', { title: t('home.customerReviews') });
   const testimonialSchema = useMemo(() => buildTestimonialSchema(t), [t]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRating, setSelectedRating] = useState(5);
@@ -176,6 +178,10 @@ export function Testimonials() {
 
   const hasTestimonials = testimonials && testimonials.length > 0;
 
+  // Hidden from the homepage editor. Placed after every hook: an early return
+  // above them would change the hook call order between renders and crash.
+  if (!heading.enabled) return null;
+
   return (
     <section className="py-10 md:py-14 bg-white">
       <div className="container-custom">
@@ -188,7 +194,7 @@ export function Testimonials() {
               viewport={{ once: true }}
               className="text-xs text-primary-600 font-medium uppercase tracking-wider"
             >
-              {t('home.customerReviews')}
+              {heading.title}
             </motion.span>
             <motion.h2
               initial={{ opacity: 0, y: 10 }}

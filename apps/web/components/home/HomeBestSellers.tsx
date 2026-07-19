@@ -19,6 +19,7 @@ export function HomeBestSellers() {
       viewAllHref="/products?sort=-soldCount"
       queryParams={{ sort: 'popularity' }}
       tabId="best_sellers"
+      sectionId="best_sellers"
       bg="bg-beige-50"
       limit={8}
       requireSoldCount

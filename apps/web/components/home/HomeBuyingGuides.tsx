@@ -9,6 +9,7 @@ import { blogApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-client';
 import { getImageUrl } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
+import { useSectionHeading } from '@/lib/use-section-heading';
 
 /**
  * Buying-guides teaser. Appliances are a considered purchase — a shopper
@@ -18,6 +19,7 @@ import { useT } from '@/lib/i18n';
  */
 export function HomeBuyingGuides() {
   const t = useT();
+  const heading = useSectionHeading('buying_guides', { title: t('home.buyingGuidesHeading'), subtitle: t('home.buyingGuides') });
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.blog.posts({ limit: 3, surface: 'home' }),
@@ -27,6 +29,11 @@ export function HomeBuyingGuides() {
 
   const posts = data?.posts || [];
 
+  // Hidden from the homepage editor.
+
+  if (!heading.enabled) return null;
+
+
   if (isLoading || posts.length === 0) return null;
 
   return (
@@ -35,10 +42,10 @@ export function HomeBuyingGuides() {
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-7">
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-primary-600">
-              {t('home.buyingGuides')}
+              {heading.subtitle}
             </span>
             <h2 className="mt-1 text-xl sm:text-2xl font-display font-bold text-dark-900">
-              {t('home.buyingGuidesHeading')}
+              {heading.title}
             </h2>
           </div>
           <Link

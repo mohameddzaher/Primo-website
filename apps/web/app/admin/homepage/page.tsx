@@ -8,6 +8,7 @@ import { IconSelect } from '@/components/admin/IconSelect';
 import { cmsApi, adminApi } from '@/lib/api';
 import { getApiErrorMessage } from '@/lib/api-error';
 import toast from 'react-hot-toast';
+import { HOMEPAGE_SECTIONS } from '@/lib/use-section-heading';
 
 type SectionKey =
   | 'homepage_announcement_bar'
@@ -23,7 +24,7 @@ type SectionKey =
   | 'homepage_wide_banner'
   | 'homepage_how_to_order'
   | 'homepage_tabbed_products'
-  | 'homepage_product_sections'
+  | 'homepage_section_headings'
   | 'homepage_new_arrivals'
   | 'homepage_promo_banners';
 
@@ -33,7 +34,7 @@ const sections: { key: SectionKey; label: string }[] = [
   { key: 'homepage_topbar_settings', label: 'Category Bar' },
   { key: 'homepage_quick_strip', label: 'Quick Strip' },
   { key: 'homepage_tabbed_products', label: 'Product Tabs' },
-  { key: 'homepage_product_sections', label: 'Product Section Headings' },
+  { key: 'homepage_section_headings', label: 'Section Headings' },
   { key: 'homepage_new_arrivals', label: 'New Arrivals' },
   { key: 'homepage_wide_banner', label: 'Wide Banner' },
   { key: 'homepage_how_to_order', label: 'How to Order' },
@@ -94,8 +95,8 @@ export default function HomepageContentPage() {
           {activeTab === 'homepage_promo_banners' && (
             <PromoBannersEditor data={(cmsData as any)?.homepage_promo_banners} />
           )}
-          {activeTab === 'homepage_product_sections' && (
-            <ProductSectionsEditor data={(cmsData as any)?.homepage_product_sections} />
+          {activeTab === 'homepage_section_headings' && (
+            <ProductSectionsEditor data={(cmsData as any)?.homepage_section_headings} />
           )}
           {activeTab === 'homepage_features' && (
             <FeaturesEditor data={cmsData?.homepage_features} />
@@ -182,6 +183,20 @@ function useSaveContent(key: string) {
       const dashKey = key.replace(/_/g, '-');
       queryClient.invalidateQueries({ queryKey: [`cms-${key}`] });
       queryClient.invalidateQueries({ queryKey: [`cms-${dashKey}`] });
+      // The storefront reads every CMS entry from ONE bundled query, which was
+      // not in the list above — so a saved change did not appear on the site
+      // until that bundle went stale (up to 5 minutes later) and the admin was
+      // left wondering whether the save had worked.
+      queryClient.invalidateQueries({ queryKey: ['cms-storefront-bundle'] });
+      // Same-tab invalidation cannot reach a storefront open in ANOTHER tab —
+      // that tab has its own query cache. This nudges it: the storefront listens
+      // for the key and refetches, so "edit here, see it there" works without
+      // shortening staleTime and putting the request volume back up.
+      try {
+        localStorage.setItem('primo-cms-updated', String(Date.now()));
+      } catch {
+        // localStorage unavailable (private mode) — same-tab updates still work.
+      }
       toast.success('Saved successfully');
     },
     onError: (error: any) => toast.error(getApiErrorMessage(error, 'Failed to save')),
@@ -254,123 +269,139 @@ function FeaturesEditor({ data }: { data: any }) {
   );
 }
 
-// ========== PRODUCT SECTION HEADINGS EDITOR ==========
+// ========== SECTION HEADINGS EDITOR ==========
 
-// The headings on the product rails (Featured / On Sale / Top Rated) used to
-// live only in the translation dictionary, so changing "On Sale" or
-// "Limited-time offers" needed a developer. These are the parts of the homepage
-// a shop owner most wants to reword for a campaign, so they belong here.
+// Every heading on the homepage used to live in the translation dictionary, so
+// renaming "On Sale" or hiding "Shop by Price" for a campaign needed a code
+// change. This edits all of them from one place.
 //
-// Every field is an override: leave it blank and the built-in bilingual text is
-// used. That way an untouched section stays correctly translated instead of
-// being frozen into whichever language happened to be typed first.
-const PRODUCT_SECTIONS: Array<{ id: string; name: string; defaults: string }> = [
-  { id: 'featured', name: 'Featured Products', defaults: 'Featured Products / Handpicked for you' },
-  { id: 'on_sale', name: 'On Sale', defaults: 'On Sale / Limited-time offers' },
-  { id: 'top_rated', name: 'Top Rated', defaults: 'Top Rated / Loved by customers' },
-];
+// Every field is an OVERRIDE: blank keeps the built-in text, which is already
+// translated into both languages. That is why there is no "reset" button — the
+// reset is clearing the field.
 
 function ProductSectionsEditor({ data }: { data: any }) {
   const [content, setContent] = useState<Record<string, any>>(() => parseCmsValue(data, {}));
-  const save = useSaveContent('homepage_product_sections');
+  const save = useSaveContent('homepage_section_headings');
 
   useEffect(() => {
     setContent(parseCmsValue(data, {}));
   }, [data]);
 
-  const update = (id: string, field: string, value: string) => {
+  const update = (id: string, field: string, value: string | boolean) => {
     setContent({ ...content, [id]: { ...(content[id] || {}), [field]: value } });
   };
-
   const field = (id: string, name: string) => (content[id] || {})[name] || '';
+  const isEnabled = (id: string) => (content[id] || {}).enabled !== false;
 
   return (
-    <Card padding="lg" className="space-y-6">
+    <Card padding="lg" className="space-y-5">
       <div>
-        <h3 className="font-semibold text-dark-900">Product Section Headings</h3>
+        <h3 className="font-semibold text-dark-900">Homepage Section Headings</h3>
         <p className="text-sm text-dark-500 mt-1">
-          Reword the headings above each product rail on the homepage. Leave a field
-          empty to keep the default text, which is already translated into both
-          languages.
+          Rename or hide any section of the homepage. Leave a field empty to keep its
+          default text, which is already translated into English and Arabic.
         </p>
       </div>
 
-      {PRODUCT_SECTIONS.map((section) => (
-        <div key={section.id} className="p-4 bg-beige-50 rounded-lg space-y-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h4 className="font-semibold text-dark-900">{section.name}</h4>
-            <span className="text-xs text-dark-400">Default: {section.defaults}</span>
-          </div>
+      {HOMEPAGE_SECTIONS.map((section) => {
+        const on = isEnabled(section.id);
+        return (
+          <div
+            key={section.id}
+            className={`p-4 rounded-lg border transition-colors ${
+              on ? 'bg-beige-50 border-beige-200' : 'bg-dark-50 border-dark-200 opacity-70'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="font-semibold text-dark-900">{section.name}</h4>
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 accent-primary-600"
+                  checked={on}
+                  onChange={(e) => update(section.id, 'enabled', e.target.checked)}
+                />
+                <span className={on ? 'text-dark-700' : 'text-dark-500'}>
+                  {on ? 'Visible' : 'Hidden'}
+                </span>
+              </label>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-dark-600 mb-1">Heading (English)</label>
-              <input
-                className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
-                value={field(section.id, 'title')}
-                onChange={(e) => update(section.id, 'title', e.target.value)}
-                placeholder="Keep default"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-dark-600 mb-1">Heading (Arabic)</label>
-              <input
-                dir="rtl"
-                className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
-                value={field(section.id, 'titleAr')}
-                onChange={(e) => update(section.id, 'titleAr', e.target.value)}
-                placeholder="اترك فارغاً للنص الافتراضي"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-dark-600 mb-1">Small label above (English)</label>
-              <input
-                className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
-                value={field(section.id, 'subtitle')}
-                onChange={(e) => update(section.id, 'subtitle', e.target.value)}
-                placeholder="Keep default"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-dark-600 mb-1">Small label above (Arabic)</label>
-              <input
-                dir="rtl"
-                className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
-                value={field(section.id, 'subtitleAr')}
-                onChange={(e) => update(section.id, 'subtitleAr', e.target.value)}
-                placeholder="اترك فارغاً للنص الافتراضي"
-              />
-            </div>
-          </div>
+            {on && (
+              <div className="mt-3 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-dark-600 mb-1">Heading (English)</label>
+                    <input
+                      className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
+                      value={field(section.id, 'title')}
+                      onChange={(e) => update(section.id, 'title', e.target.value)}
+                      placeholder="Keep default"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-dark-600 mb-1">Heading (Arabic)</label>
+                    <input
+                      dir="rtl"
+                      className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
+                      value={field(section.id, 'titleAr')}
+                      onChange={(e) => update(section.id, 'titleAr', e.target.value)}
+                      placeholder="اترك فارغاً للنص الافتراضي"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-dark-600 mb-1">Small label above (English)</label>
+                    <input
+                      className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
+                      value={field(section.id, 'subtitle')}
+                      onChange={(e) => update(section.id, 'subtitle', e.target.value)}
+                      placeholder="Keep default"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-dark-600 mb-1">Small label above (Arabic)</label>
+                    <input
+                      dir="rtl"
+                      className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
+                      value={field(section.id, 'subtitleAr')}
+                      onChange={(e) => update(section.id, 'subtitleAr', e.target.value)}
+                      placeholder="اترك فارغاً للنص الافتراضي"
+                    />
+                  </div>
+                </div>
 
-          <div>
-            <label className="block text-xs font-medium text-dark-600 mb-1">
-              Panel image URL
-              <span className="font-normal text-dark-400">
-                {' '}— only used by sections shown as a large panel (On Sale). Blank uses the
-                section&apos;s own top product photo.
-              </span>
-            </label>
-            <input
-              className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
-              value={field(section.id, 'image')}
-              onChange={(e) => update(section.id, 'image', e.target.value)}
-              placeholder="https://..."
-            />
-            {field(section.id, 'image') && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={field(section.id, 'image')}
-                alt=""
-                className="mt-2 h-24 w-40 object-cover rounded-lg border border-beige-200"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = 'none';
-                }}
-              />
+                {section.hasImage && (
+                  <div>
+                    <label className="block text-xs font-medium text-dark-600 mb-1">
+                      Panel image URL
+                      <span className="font-normal text-dark-400">
+                        {' '}— blank uses this section&apos;s own top product photo.
+                      </span>
+                    </label>
+                    <input
+                      className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm"
+                      value={field(section.id, 'image')}
+                      onChange={(e) => update(section.id, 'image', e.target.value)}
+                      placeholder="https://..."
+                    />
+                    {field(section.id, 'image') && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={field(section.id, 'image')}
+                        alt=""
+                        className="mt-2 h-24 w-40 object-cover rounded-lg border border-beige-200"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <Button
         leftIcon={<HiOutlineSave size={16} />}

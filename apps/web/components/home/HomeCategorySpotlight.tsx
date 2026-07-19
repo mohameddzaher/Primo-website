@@ -10,6 +10,7 @@ import { queryKeys } from '@/lib/query-client';
 import { ProductRail } from './ProductRail';
 import { getImageUrl, cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
+import { useSectionHeading } from '@/lib/use-section-heading';
 
 /** How many categories get a spotlight row. */
 const SPOTLIGHT_COUNT = 3;
@@ -27,6 +28,7 @@ interface SpotlightRowProps {
 
 function SpotlightRow({ category, products, reversed, index }: SpotlightRowProps) {
   const t = useT();
+  const heading = useSectionHeading('category_spotlight', { title: t('home.categorySpotlight') });
   const imageUrl = getImageUrl(category.image);
   const href = `/products?category=${category._id}`;
 
@@ -60,7 +62,7 @@ function SpotlightRow({ category, products, reversed, index }: SpotlightRowProps
         <div className="absolute inset-0 bg-gradient-to-t from-dark-950/85 via-dark-950/40 to-transparent" />
         <div className="relative h-full flex flex-col justify-end p-5 sm:p-6 text-start">
           <span className="text-xs font-semibold uppercase tracking-wider text-primary-400">
-            {t('home.categorySpotlight')}
+            {heading.title}
           </span>
           <h2 className="mt-1 text-xl sm:text-2xl font-display font-bold text-white">
             {t('home.shopTheCategory', { category: category.name })}
@@ -101,6 +103,7 @@ function SpotlightRow({ category, products, reversed, index }: SpotlightRowProps
  * products simply doesn't render.
  */
 export function HomeCategorySpotlight() {
+  const spotlight = useSectionHeading('category_spotlight', { title: '' });
   const { data: categories = [], isLoading: categoriesLoading } = useQuery({
     queryKey: queryKeys.categories.list(),
     queryFn: categoriesApi.getAll,
@@ -127,6 +130,11 @@ export function HomeCategorySpotlight() {
       staleTime: 5 * 60 * 1000,
     })),
   });
+
+  // Hidden from the homepage editor.
+
+  if (!spotlight.enabled) return null;
+
 
   if (categoriesLoading) return null;
   if (productQueries.some((q) => q.isLoading)) return null;

@@ -10,6 +10,7 @@ import { ProductGridSkeleton } from '@/components/ui';
 import { getImageUrl } from '@/lib/utils';
 import { useCmsContent } from '@/lib/use-cms-content';
 import { useI18n } from '@/lib/i18n';
+import { useSectionHeading } from '@/lib/use-section-heading';
 import type { TranslationKey } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
@@ -84,27 +85,16 @@ export function HomeProductSection({
   tabId,
   sectionId,
 }: HomeProductSectionProps) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
 
   // Read the tabbed products config to check if this section is enabled
   const { data: tabsCms } = useCmsContent('homepage_tabbed_products');
-  const { data: sectionsCms } = useCmsContent('homepage_product_sections');
 
-  const sectionOverrides = parseCmsJson(sectionsCms, {} as Record<string, any>);
-  const override = (sectionId ? sectionOverrides?.[sectionId] : undefined) || {};
-
-  // Prefer the admin's text for the active locale, then their other-locale
-  // text, then the built-in translation. Falling back across locales matters:
-  // an admin who fills in only Arabic should see it used, not an English
-  // heading sitting under an Arabic page.
-  const pick = (en?: string, ar?: string) => {
-    const primary = locale === 'ar' ? ar : en;
-    return (primary || '').trim() || (locale === 'ar' ? en : ar)?.trim() || undefined;
-  };
-
-  const title = pick(override.title, override.titleAr) ?? t(titleKey);
-  const subtitle =
-    pick(override.subtitle, override.subtitleAr) ?? (subtitleKey ? t(subtitleKey) : undefined);
+  const heading = useSectionHeading(sectionId || '', {
+    title: t(titleKey),
+    subtitle: subtitleKey ? t(subtitleKey) : undefined,
+  });
+  const { title, subtitle } = heading;
 
   const { data: result, isLoading } = useQuery({
     queryKey: [queryKey, limit],
@@ -116,6 +106,9 @@ export function HomeProductSection({
 
   // Check if globally disabled
   if (tabsConfig.enabled === false) return null;
+
+  // An admin switched this section off in the homepage editor.
+  if (!heading.enabled) return null;
 
   // Check if this specific tab/section is disabled
   if (tabId && tabsConfig.tabs?.length > 0) {
@@ -150,7 +143,7 @@ export function HomeProductSection({
     // An admin-chosen image wins; otherwise the panel borrows the rail's own
     // best product, which stays on-topic and changes with the catalogue.
     const panelImage =
-      (override.image || '').trim() || getImageUrl(products[0]?.images?.[0]);
+      heading.image || getImageUrl(products[0]?.images?.[0]);
 
     return (
       <section className={`${bg} border-b border-beige-100`}>

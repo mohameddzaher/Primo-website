@@ -1,6 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cmsApi } from '@/lib/api';
 
 /**
@@ -20,7 +21,7 @@ export const STOREFRONT_CMS_KEYS = [
   'homepage_hero_categories',
   'homepage_hero_promos',
   'homepage_tabbed_products',
-  'homepage_product_sections',
+  'homepage_section_headings',
   'homepage_new_arrivals',
   'homepage_wide_banner',
   'homepage_how_to_order',
@@ -34,6 +35,24 @@ export type StorefrontCmsKey = (typeof STOREFRONT_CMS_KEYS)[number];
 
 /** Shared bulk fetch — one request for the whole storefront shell. */
 export function useCmsBundle() {
+  const queryClient = useQueryClient();
+
+  // An admin saving in another tab writes a timestamp to localStorage; the
+  // `storage` event only fires in OTHER tabs, which is exactly the case a
+  // same-tab cache invalidation cannot reach. Without this, editing the
+  // homepage in one tab and watching the storefront in another showed nothing
+  // for up to `staleTime`, and the obvious fix — shortening staleTime — would
+  // put back the per-page request volume this bundle exists to remove.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'primo-cms-updated') {
+        queryClient.invalidateQueries({ queryKey: ['cms-storefront-bundle'] });
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ['cms-storefront-bundle'],
     queryFn: () => cmsApi.getMultiple([...STOREFRONT_CMS_KEYS]),

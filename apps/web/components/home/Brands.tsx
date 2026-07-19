@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { brandsApi } from '@/lib/api';
 import { useT } from '@/lib/i18n';
+import { useSectionHeading } from '@/lib/use-section-heading';
 
 // Local brand images mapping (name lowercase -> path)
 const localBrandImages: Record<string, string> = {
@@ -80,6 +81,7 @@ function resolveLogo(name: string, apiLogo?: string): string {
 
 export function Brands() {
   const t = useT();
+  const heading = useSectionHeading('brands', { title: t('home.brandsHeading'), subtitle: t('nav.brands') });
   const { data: apiBrands } = useQuery({
     queryKey: ['brands-homepage'],
     queryFn: () => brandsApi.getAll(),
@@ -106,6 +108,11 @@ export function Brands() {
 
   const duplicated = [...brands, ...brands];
 
+  // Hidden from the homepage editor.
+
+  if (!heading.enabled) return null;
+
+
   return (
     <section className="py-12 sm:py-16 bg-beige-50 border-y border-beige-200 overflow-hidden">
       <div className="container-custom">
@@ -119,10 +126,10 @@ export function Brands() {
           className="text-center mb-8"
         >
           <span className="text-xs font-semibold uppercase tracking-wider text-primary-600">
-            {t('nav.brands')}
+            {heading.subtitle}
           </span>
           <h2 className="mt-1 text-xl sm:text-2xl font-display font-bold text-dark-900">
-            {t('home.brandsHeading')}
+            {heading.title}
           </h2>
           <span
             aria-hidden

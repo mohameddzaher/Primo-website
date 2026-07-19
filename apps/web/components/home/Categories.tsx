@@ -9,6 +9,7 @@ import { queryKeys } from '@/lib/query-client';
 import { Skeleton } from '@/components/ui';
 import { getImageUrl } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
+import { useSectionHeading } from '@/lib/use-section-heading';
 
 // Smart emoji fallback based on category name keywords
 function getCategoryIcon(name: string): string {
@@ -37,6 +38,7 @@ function getCategoryIcon(name: string): string {
 
 export function Categories() {
   const t = useT();
+  const heading = useSectionHeading('categories', { title: t('home.browseCollections'), subtitle: t('home.shopByCategory') });
   const { data: categories, isLoading } = useQuery({
     queryKey: queryKeys.categories.list(),
     queryFn: categoriesApi.getAll,
@@ -53,6 +55,11 @@ export function Categories() {
     return true;
   });
 
+  // Hidden from the homepage editor.
+
+  if (!heading.enabled) return null;
+
+
   if (!isLoading && parentCategories.length === 0) return null;
 
   return (
@@ -66,7 +73,7 @@ export function Categories() {
             viewport={{ once: true }}
             className="text-xs text-primary-600 font-medium uppercase tracking-wider"
           >
-            {t('home.shopByCategory')}
+            {heading.subtitle}
           </motion.span>
           <motion.h2
             initial={{ opacity: 0, y: 10 }}
@@ -75,7 +82,7 @@ export function Categories() {
             transition={{ delay: 0.1 }}
             className="mt-2 text-2xl md:text-3xl font-display font-semibold text-dark-900"
           >
-            {t('home.browseCollections')}
+            {heading.title}
           </motion.h2>
         </div>
 

@@ -11,6 +11,7 @@ import { ProductCard } from '@/components/product/ProductCard';
 import { RAIL_CARD_WIDTH } from './ProductRail';
 import { Button, ProductGridSkeleton } from '@/components/ui';
 import { useT } from '@/lib/i18n';
+import { useSectionHeading } from '@/lib/use-section-heading';
 
 interface CountdownTimerProps {
   endDate: string | Date;
@@ -73,6 +74,12 @@ function CountdownTimer({ endDate }: CountdownTimerProps) {
 
 export function DealsSection() {
   const t = useT();
+  const heading = useSectionHeading('flash_deals', { title: t('home.flashDeals'), subtitle: '' });
+  // Was the section heading explicitly renamed in the homepage editor? If so it
+  // must win over the running offer's own title — otherwise the field appears
+  // to do nothing whenever a deal happens to be live, which is precisely when
+  // someone is most likely to be editing it.
+  const headingOverridden = heading.title !== t('home.flashDeals');
 
   // Try to fetch a real flash deal from the backend
   const { data: flashDeal, isLoading: isLoadingDeal } = useQuery({
@@ -82,17 +89,24 @@ export function DealsSection() {
   });
 
   // Fallback: fetch products sorted by discount if no flash deal
+  const hasFlashDeal = !!flashDeal?.offer;
+  // A store-wide offer carries no productIds or categoryIds, so the flash-deal
+  // endpoint legitimately returns zero products for it. Treating that as "no
+  // deal to show" hid the entire section whenever the live offer happened to be
+  // store-wide — the countdown, the heading and all. Fall back to the
+  // deepest-discounted products in that case too, so the section still shows
+  // the deal it is advertising.
+  const flashDealProducts = flashDeal?.products || [];
+  const needsFallback = !hasFlashDeal || flashDealProducts.length === 0;
+
   const { data: fallbackData, isLoading: isLoadingFallback } = useQuery({
     queryKey: queryKeys.products.list({ sort: 'discount', limit: 6 }),
     queryFn: () => productsApi.getAll({ sort: 'discount', limit: 6 }),
-    enabled: !isLoadingDeal && !flashDeal?.offer,
+    enabled: !isLoadingDeal && needsFallback,
   });
 
-  const hasFlashDeal = !!flashDeal?.offer;
-  const products = hasFlashDeal
-    ? flashDeal.products || []
-    : fallbackData?.products || [];
-  const isLoading = isLoadingDeal || (!hasFlashDeal && isLoadingFallback);
+  const products = needsFallback ? fallbackData?.products || [] : flashDealProducts;
+  const isLoading = isLoadingDeal || (needsFallback && isLoadingFallback);
 
   // Only ever count down against a genuine offer end date that is still in the
   // future — never fabricate urgency when there is no real deadline.
@@ -103,9 +117,16 @@ export function DealsSection() {
       ? parsedEndsAt
       : null;
 
-  // Admin-entered offer titles are shown verbatim; only the fallback heading is
-  // translated.
-  const dealTitle = hasFlashDeal ? flashDeal.offer.title : t('home.flashDeals');
+  // Precedence: a live offer's own title (the most specific and timely), then
+  // the homepage editor's override, then the translated default.
+  const dealTitle = headingOverridden
+    ? heading.title
+    : hasFlashDeal
+      ? flashDeal.offer.title
+      : heading.title;
+
+  // Hidden from the homepage editor.
+  if (!heading.enabled) return null;
 
   if (!isLoading && products.length === 0) return null;
 

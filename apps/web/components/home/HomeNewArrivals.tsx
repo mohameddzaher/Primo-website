@@ -8,6 +8,7 @@ import { productsApi } from '@/lib/api';
 import { ProductCard } from '@/components/product/ProductCard';
 import { RAIL_CARD_WIDTH } from './ProductRail';
 import { useCmsContent } from '@/lib/use-cms-content';
+import { useSectionHeading } from '@/lib/use-section-heading';
 import { useI18n } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
@@ -34,6 +35,15 @@ export function HomeNewArrivals() {
 
   const settings = parseCmsJson(cms, defaultSettings);
 
+  // This section has its own editor (New Arrivals) AND appears in the unified
+  // Section Headings editor. Its own settings are the more specific of the two,
+  // so they win; the shared editor fills in whatever they leave blank. Without
+  // this the shared editor would silently do nothing for this one section.
+  const heading = useSectionHeading('new_arrivals', {
+    title: settings.title || defaultSettings.title,
+    subtitle: settings.subtitle || defaultSettings.subtitle,
+  });
+
   const { data: result, isLoading } = useQuery({
     queryKey: ['products-new-arrivals', settings.count],
     queryFn: () => productsApi.getAll({ sort: 'newest', limit: settings.count || 10 }),
@@ -44,6 +54,8 @@ export function HomeNewArrivals() {
   const products = result?.products || [];
 
   if (settings.enabled === false) return null;
+  // Hidden from the shared Section Headings editor.
+  if (!heading.enabled) return null;
   if (!isLoading && products.length === 0) return null;
 
   // 'prev'/'next' follow reading order. In an RTL scroller scrollLeft runs
@@ -61,10 +73,10 @@ export function HomeNewArrivals() {
         <div className="flex items-end justify-between mb-6">
           <div>
             <span className="text-xs font-semibold text-primary-600 uppercase tracking-wider">
-              {settings.subtitle || defaultSettings.subtitle}
+              {heading.subtitle}
             </span>
             <h2 className="mt-1 text-xl sm:text-2xl font-display font-bold text-dark-900">
-              {settings.title || defaultSettings.title}
+              {heading.title}
             </h2>
             {/* Short accent rule — matches the other section headers */}
             <span

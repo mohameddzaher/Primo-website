@@ -8,6 +8,7 @@ import { productsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
 import { useT } from '@/lib/i18n';
+import { useSectionHeading } from '@/lib/use-section-heading';
 
 const BUCKETS: { id: string; min: number; max: number | '' }[] = [
   { id: 'entry', min: 0, max: 500 },
@@ -24,6 +25,7 @@ const BUCKETS: { id: string; min: number; max: number | '' }[] = [
  */
 export function HomeShopByPrice() {
   const t = useT();
+  const heading = useSectionHeading('shop_by_price', { title: t('home.shopByPriceHeading'), subtitle: t('home.shopByPrice') });
   const { settings } = useSettings();
   const currency = settings.currency;
 
@@ -56,6 +58,9 @@ export function HomeShopByPrice() {
 
   // Nothing to merchandise (still loading, or an empty catalogue) — render
   // nothing rather than an empty shell.
+  // Hidden from the homepage editor.
+  if (!heading.enabled) return null;
+
   if (isLoading || buckets.length === 0) return null;
 
   // The "Under"/"Over" qualifier is the existing filter string with its number
@@ -78,10 +83,10 @@ export function HomeShopByPrice() {
       <div className="container-custom py-12 sm:py-16">
         <div className="text-center max-w-xl mx-auto mb-8">
           <span className="text-xs font-semibold uppercase tracking-wider text-primary-600">
-            {t('home.shopByPrice')}
+            {heading.subtitle}
           </span>
           <h2 className="mt-1 text-xl sm:text-2xl font-display font-bold text-dark-900">
-            {t('home.shopByPriceHeading')}
+            {heading.title}
           </h2>
         </div>
 
