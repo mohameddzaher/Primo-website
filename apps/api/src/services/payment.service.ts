@@ -17,7 +17,7 @@
 
 import crypto from 'crypto';
 
-export type PaymentProviderName = 'moyasar' | 'none';
+export type PaymentProviderName = 'moyasar' | 'demo' | 'none';
 
 export interface CreatePaymentInput {
   orderId: string;
@@ -159,6 +159,55 @@ class MoyasarProvider implements PaymentProvider {
   }
 }
 
+// ─── Demo (sandbox only) ─────────────────────────────────────────────────────
+
+/**
+ * A fake PSP that approves every payment, so the card / Apple Pay flow can be
+ * demonstrated end to end without real credentials. It exists because the
+ * alternative — showing "Card" at checkout with no provider behind it — left
+ * the customer holding an order they could never pay.
+ *
+ * This provider MARKS ORDERS PAID WITHOUT COLLECTING MONEY. It is therefore
+ * refused outright when NODE_ENV=production (see getPaymentProvider), and it
+ * reports every payment as an obviously-fake `demo_*` id so a settled order can
+ * always be traced back to it. Never enable it on a real store.
+ */
+class DemoProvider implements PaymentProvider {
+  readonly name = 'demo' as const;
+
+  async createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult> {
+    const paymentId = `demo_${input.orderNumber}_${input.amount.toFixed(2)}`;
+    // Bounce straight back to the callback the app already handles, flagged so
+    // the confirm step can recognise a sandbox return.
+    const separator = input.callbackUrl.includes('?') ? '&' : '?';
+    return {
+      paymentId,
+      redirectUrl: `${input.callbackUrl}${separator}demo=1&payment_id=${encodeURIComponent(paymentId)}`,
+    };
+  }
+
+  verifyWebhookSignature(): boolean {
+    // No webhooks in demo mode; nothing may be accepted unsigned.
+    return false;
+  }
+
+  parseWebhook(): VerifiedPayment | null {
+    return null;
+  }
+
+  async fetchPayment(paymentId: string): Promise<VerifiedPayment | null> {
+    if (!paymentId.startsWith('demo_')) return null;
+    // Recover the amount encoded at creation so the caller's amount-match guard
+    // still runs for real instead of being rubber-stamped.
+    const amount = Number(paymentId.split('_').pop());
+    return {
+      paymentId,
+      status: 'paid',
+      amount: Number.isFinite(amount) ? amount : 0,
+    };
+  }
+}
+
 // ─── Resolution ──────────────────────────────────────────────────────────────
 
 let cached: PaymentProvider | null | undefined;
@@ -172,6 +221,24 @@ export function getPaymentProvider(): PaymentProvider | null {
   if (cached !== undefined) return cached;
 
   const provider = (process.env.PAYMENT_PROVIDER || 'none').toLowerCase();
+
+  if (provider === 'demo') {
+    // Refuse in production even if someone sets the variable there: this
+    // provider settles orders without taking money, so a misconfigured deploy
+    // would hand out free goods.
+    if (process.env.NODE_ENV === 'production') {
+      console.error(
+        '🚨 PAYMENT_PROVIDER=demo is refused in production — online payments disabled. Set PAYMENT_PROVIDER=moyasar with real credentials.'
+      );
+      cached = null;
+      return cached;
+    }
+    console.warn(
+      '⚠️  PAYMENT_PROVIDER=demo — card payments are SIMULATED and no money is collected. Sandbox use only.'
+    );
+    cached = new DemoProvider();
+    return cached;
+  }
 
   if (provider === 'moyasar') {
     const secretKey = process.env.MOYASAR_SECRET_KEY;

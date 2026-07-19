@@ -52,6 +52,70 @@ describe('payment provider resolution', () => {
   });
 });
 
+// The demo provider marks orders paid without collecting any money. It exists
+// so the card flow can be shown end to end without PSP credentials — before it,
+// checkout offered "Card" with nothing behind it and left the customer holding
+// an order they could never pay. Because it settles orders for free, the
+// production guard below is the single most important assertion in this file.
+describe('demo payment provider', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  afterAll(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it('resolves outside production', () => {
+    process.env.PAYMENT_PROVIDER = 'demo';
+    process.env.NODE_ENV = 'development';
+    const { getPaymentProvider } = loadService();
+    expect(getPaymentProvider()?.name).toBe('demo');
+  });
+
+  it('is REFUSED in production even when explicitly configured', () => {
+    process.env.PAYMENT_PROVIDER = 'demo';
+    process.env.NODE_ENV = 'production';
+    const { getPaymentProvider, isOnlinePaymentEnabled } = loadService();
+    expect(getPaymentProvider()).toBeNull();
+    expect(isOnlinePaymentEnabled()).toBe(false);
+  });
+
+  it('never accepts a webhook — nothing may be settled unsigned', () => {
+    process.env.PAYMENT_PROVIDER = 'demo';
+    process.env.NODE_ENV = 'development';
+    const { getPaymentProvider } = loadService();
+    const provider = getPaymentProvider();
+    expect(provider.verifyWebhookSignature('{}', 'anything')).toBe(false);
+    expect(provider.parseWebhook({ id: 'demo_x_1.00' })).toBeNull();
+  });
+
+  it('reports the amount encoded at creation so the caller amount-check still runs', async () => {
+    process.env.PAYMENT_PROVIDER = 'demo';
+    process.env.NODE_ENV = 'development';
+    const { getPaymentProvider } = loadService();
+    const provider = getPaymentProvider();
+    const created = await provider.createPayment({
+      orderId: 'o1',
+      orderNumber: 'PRM-TEST-1',
+      amount: 566.35,
+      description: 'test',
+      callbackUrl: 'http://localhost:3000/checkout/payment-result',
+    });
+    const fetched = await provider.fetchPayment(created.paymentId);
+    expect(fetched?.status).toBe('paid');
+    expect(fetched?.amount).toBe(566.35);
+  });
+
+  it('does not recognise a payment id it did not issue', async () => {
+    process.env.PAYMENT_PROVIDER = 'demo';
+    process.env.NODE_ENV = 'development';
+    const { getPaymentProvider } = loadService();
+    expect(await getPaymentProvider().fetchPayment('pay_realmoyasarid')).toBeNull();
+  });
+});
+
 describe('webhook signature verification', () => {
   const SECRET = 'whsec_super_secret';
   const body = JSON.stringify({ data: { id: 'pay_123', status: 'paid', amount: 174800 } });

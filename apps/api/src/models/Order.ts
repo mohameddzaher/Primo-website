@@ -86,6 +86,7 @@ export interface IOrder extends Document {
   discount: number;
   discountCode?: string;
   pointsRedeemed?: number;
+  submitSignature?: string;
   taxRate: number;
   taxAmount: number;
   taxLabel: string;
@@ -225,6 +226,13 @@ const orderSchema = new Schema<IOrder>(
       min: 0,
     },
     discountCode: String,
+    // Fingerprint of the submission that created this order (items + payment
+    // method + requested promo code + points). Used only by the double-submit
+    // guard in POST /orders. It records what the customer ASKED for, which the
+    // stored fields cannot: `discountCode` is overwritten with 'REFERRAL' or
+    // dropped entirely when a code does not qualify, so comparing against it
+    // would let a genuine double-click through as a second order.
+    submitSignature: { type: String, select: false },
     pointsRedeemed: { type: Number, default: 0, min: 0 },
     taxRate: {
       type: Number,

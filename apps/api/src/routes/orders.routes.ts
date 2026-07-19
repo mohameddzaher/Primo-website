@@ -309,25 +309,35 @@ router.post(
     // Double-submit guard: if the customer already created an identical order in
     // the last 20s (double-click / retry / flaky network), return that order
     // instead of creating a duplicate + decrementing stock twice.
-    const itemSignature = [...items]
-      .map((it: any) => `${it.productId}:${it.variantId || ''}:${it.quantity}`)
-      .sort()
-      .join('|');
+    //
+    // The signature must cover every field that changes what the customer pays,
+    // not just the items. Keying on items alone meant a shopper who submitted,
+    // realised they had forgotten their promo code, and re-submitted with it
+    // was handed back the ORIGINAL undiscounted order and told it succeeded —
+    // same for switching payment method or redeeming points. A genuine retry
+    // repeats all of these, so real double-clicks are still collapsed.
+    const lineSignature = (list: any[]) =>
+      [...list]
+        .map((it: any) => `${it.productId}:${it.variantId || ''}:${it.quantity}`)
+        .sort()
+        .join('|');
+    const orderSignature = [
+      lineSignature(items),
+      paymentMethod || '',
+      (discountCode || '').toUpperCase(),
+      redeemPoints || 0,
+    ].join('#');
+
     const recentOrder = await Order.findOne({
       userId: req.userId,
       createdAt: { $gte: new Date(Date.now() - 20_000) },
+      submitSignature: orderSignature,
     })
       .sort({ createdAt: -1 })
       .lean();
     if (recentOrder) {
-      const recentSig = (recentOrder.items || [])
-        .map((it: any) => `${it.productId}:${it.variantId || ''}:${it.quantity}`)
-        .sort()
-        .join('|');
-      if (recentSig === itemSignature) {
-        res.status(200).json({ success: true, data: recentOrder, duplicate: true });
-        return;
-      }
+      res.status(200).json({ success: true, data: recentOrder, duplicate: true });
+      return;
     }
 
     // Validate and get products
@@ -553,6 +563,7 @@ router.post(
       shippingCost,
       discount,
       discountCode: promoDiscount > 0 ? discountCode : (referralApplied ? 'REFERRAL' : undefined),
+      submitSignature: orderSignature,
       pointsRedeemed,
       taxRate,
       taxAmount,

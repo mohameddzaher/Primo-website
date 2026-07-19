@@ -126,12 +126,29 @@ async function settleOrderFromPayment(paymentId: string): Promise<void> {
 
   await bookOrderRevenue(claimed);
 
-  await AuditLog.create({
-    action: 'update',
-    resource: 'order',
-    resourceId: claimed._id.toString(),
-    newValue: { paymentStatus: 'paid', paymentIntentId: paymentId },
-  });
+  // The money is captured and the order is already flipped by this point, so a
+  // problem writing the audit trail must not fail the caller: the storefront
+  // would show the customer a payment error after a successful payment, and a
+  // PSP webhook would be retried against an order that is already settled.
+  //
+  // `userId` is required on AuditLog and there is no admin acting here — this
+  // is settlement triggered by the PSP — so it is attributed to the customer
+  // who actually made the payment. Omitting it threw a validation error that
+  // surfaced as "Validation failed" on an otherwise successful checkout.
+  try {
+    await AuditLog.create({
+      userId: claimed.userId,
+      action: 'update',
+      resource: 'order',
+      resourceId: claimed._id.toString(),
+      newValue: { paymentStatus: 'paid', paymentIntentId: paymentId },
+    });
+  } catch (auditErr) {
+    console.error(
+      `Order ${claimed.orderNumber} settled but the audit entry failed to write:`,
+      auditErr
+    );
+  }
 }
 
 /**
