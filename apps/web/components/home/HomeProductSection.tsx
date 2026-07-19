@@ -9,7 +9,7 @@ import { ProductRail } from './ProductRail';
 import { ProductGridSkeleton } from '@/components/ui';
 import { getImageUrl } from '@/lib/utils';
 import { useCmsContent } from '@/lib/use-cms-content';
-import { useT } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 import type { TranslationKey } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
@@ -55,6 +55,17 @@ interface HomeProductSectionProps {
   requireSoldCount?: boolean;
   /** CMS tab id to check enabled state from homepage_tabbed_products config */
   tabId?: string;
+  /**
+   * Identifies this section in the `homepage_product_sections` CMS entry, so an
+   * admin can override its heading, eyebrow text and panel artwork.
+   *
+   * Without this the heading comes only from the translation dictionary and is
+   * editable by a developer alone — which is not what "manage the homepage"
+   * should mean. Overrides are per-field: anything left blank keeps the
+   * translated default, so the section stays bilingual unless someone
+   * deliberately replaces the text.
+   */
+  sectionId?: string;
 }
 
 export function HomeProductSection({
@@ -71,13 +82,29 @@ export function HomeProductSection({
   requireRatings = false,
   requireSoldCount = false,
   tabId,
+  sectionId,
 }: HomeProductSectionProps) {
-  const t = useT();
-  const title = t(titleKey);
-  const subtitle = subtitleKey ? t(subtitleKey) : undefined;
+  const { t, locale } = useI18n();
 
   // Read the tabbed products config to check if this section is enabled
   const { data: tabsCms } = useCmsContent('homepage_tabbed_products');
+  const { data: sectionsCms } = useCmsContent('homepage_product_sections');
+
+  const sectionOverrides = parseCmsJson(sectionsCms, {} as Record<string, any>);
+  const override = (sectionId ? sectionOverrides?.[sectionId] : undefined) || {};
+
+  // Prefer the admin's text for the active locale, then their other-locale
+  // text, then the built-in translation. Falling back across locales matters:
+  // an admin who fills in only Arabic should see it used, not an English
+  // heading sitting under an Arabic page.
+  const pick = (en?: string, ar?: string) => {
+    const primary = locale === 'ar' ? ar : en;
+    return (primary || '').trim() || (locale === 'ar' ? en : ar)?.trim() || undefined;
+  };
+
+  const title = pick(override.title, override.titleAr) ?? t(titleKey);
+  const subtitle =
+    pick(override.subtitle, override.subtitleAr) ?? (subtitleKey ? t(subtitleKey) : undefined);
 
   const { data: result, isLoading } = useQuery({
     queryKey: [queryKey, limit],
@@ -120,9 +147,10 @@ export function HomeProductSection({
   // ── Panel layout: image-led panel beside a rail of products ───────────────
   if (layout === 'panel') {
     const reversed = panelSide === 'end';
-    // The panel artwork is the rail's own best product — always on-topic, and
-    // it changes by itself as the catalogue does. No hardcoded stock photo.
-    const panelImage = getImageUrl(products[0]?.images?.[0]);
+    // An admin-chosen image wins; otherwise the panel borrows the rail's own
+    // best product, which stays on-topic and changes with the catalogue.
+    const panelImage =
+      (override.image || '').trim() || getImageUrl(products[0]?.images?.[0]);
 
     return (
       <section className={`${bg} border-b border-beige-100`}>
@@ -138,11 +166,16 @@ export function HomeProductSection({
                     alt=""
                     aria-hidden
                     fill
-                    className="object-cover opacity-60"
+                    className="object-cover"
                     sizes="(max-width: 1024px) 100vw, 33vw"
                   />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-dark-950/90 via-dark-950/55 to-dark-950/25" />
+                {/* The photo used to sit at opacity-60 UNDER this gradient as
+                    well, which stacked two dimmers and left the artwork looking
+                    broken rather than atmospheric. The image is now full
+                    strength and only the gradient darkens it — enough contrast
+                    for the white heading, while the picture stays legible. */}
+                <div className="absolute inset-0 bg-gradient-to-t from-dark-950/95 via-dark-950/60 to-dark-950/10" />
 
                 <div className="relative h-full flex flex-col justify-end p-6 sm:p-7 text-start">
                   {subtitle && (

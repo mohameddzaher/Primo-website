@@ -39,6 +39,7 @@ export default function HomePage() {
         viewAllHref="/products?featured=true"
         queryParams={{ featured: true }}
         tabId="featured"
+        sectionId="featured"
         bg="bg-white"
         limit={8}
       />
@@ -57,6 +58,7 @@ export default function HomePage() {
         viewAllHref="/products?onSale=true"
         queryParams={{ onSale: true, sort: 'discount' }}
         tabId="on_sale"
+        sectionId="on_sale"
         bg="bg-white"
         limit={8}
       />
@@ -78,6 +80,7 @@ export default function HomePage() {
         viewAllHref="/products?sort=-averageRating"
         queryParams={{ sort: 'rating' }}
         tabId="top_rated"
+        sectionId="top_rated"
         bg="bg-beige-50"
         limit={8}
         requireRatings

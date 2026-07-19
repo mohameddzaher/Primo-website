@@ -20,6 +20,7 @@ export const STOREFRONT_CMS_KEYS = [
   'homepage_hero_categories',
   'homepage_hero_promos',
   'homepage_tabbed_products',
+  'homepage_product_sections',
   'homepage_new_arrivals',
   'homepage_wide_banner',
   'homepage_how_to_order',
