@@ -172,6 +172,9 @@ class MoyasarProvider implements PaymentProvider {
  * reports every payment as an obviously-fake `demo_*` id so a settled order can
  * always be traced back to it. Never enable it on a real store.
  */
+/** Exact value ALLOW_DEMO_PAYMENTS must hold to permit simulated payments in production. */
+export const DEMO_PAYMENTS_ACK = 'i-understand-no-money-is-collected';
+
 class DemoProvider implements PaymentProvider {
   readonly name = 'demo' as const;
 
@@ -223,19 +226,35 @@ export function getPaymentProvider(): PaymentProvider | null {
   const provider = (process.env.PAYMENT_PROVIDER || 'none').toLowerCase();
 
   if (provider === 'demo') {
-    // Refuse in production even if someone sets the variable there: this
-    // provider settles orders without taking money, so a misconfigured deploy
-    // would hand out free goods.
+    // This provider settles orders without taking money, so a misconfigured
+    // deploy would hand out free goods. Outside production it is simply
+    // allowed; in production it requires a second, deliberate acknowledgement.
+    //
+    // The acknowledgement is an exact sentence rather than a boolean because
+    // hosts (Render included) set NODE_ENV=production automatically, and a
+    // demo deployment genuinely needs the card flow to work. `=true` is the
+    // kind of value someone copies without reading; this one cannot be typed
+    // by accident or turned on by a generic "enable everything" sweep.
     if (process.env.NODE_ENV === 'production') {
-      console.error(
-        '🚨 PAYMENT_PROVIDER=demo is refused in production — online payments disabled. Set PAYMENT_PROVIDER=moyasar with real credentials.'
+      if (process.env.ALLOW_DEMO_PAYMENTS !== DEMO_PAYMENTS_ACK) {
+        console.error(
+          '🚨 PAYMENT_PROVIDER=demo is refused in production — online payments disabled. ' +
+            'For a sandbox/demo deployment set ALLOW_DEMO_PAYMENTS to the exact acknowledgement string. ' +
+            'For a real store set PAYMENT_PROVIDER=moyasar with real credentials.'
+        );
+        cached = null;
+        return cached;
+      }
+      console.warn(
+        '🚨🚨 RUNNING IN PRODUCTION WITH SIMULATED PAYMENTS 🚨🚨\n' +
+          '     Every card/Apple Pay order will be marked PAID without collecting any money.\n' +
+          '     This is only safe for a demo. Remove ALLOW_DEMO_PAYMENTS before taking real orders.'
       );
-      cached = null;
-      return cached;
+    } else {
+      console.warn(
+        '⚠️  PAYMENT_PROVIDER=demo — card payments are SIMULATED and no money is collected. Sandbox use only.'
+      );
     }
-    console.warn(
-      '⚠️  PAYMENT_PROVIDER=demo — card payments are SIMULATED and no money is collected. Sandbox use only.'
-    );
     cached = new DemoProvider();
     return cached;
   }

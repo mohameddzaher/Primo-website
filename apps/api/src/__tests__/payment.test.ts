@@ -74,12 +74,45 @@ describe('demo payment provider', () => {
     expect(getPaymentProvider()?.name).toBe('demo');
   });
 
-  it('is REFUSED in production even when explicitly configured', () => {
+  it('is REFUSED in production without the explicit acknowledgement', () => {
     process.env.PAYMENT_PROVIDER = 'demo';
     process.env.NODE_ENV = 'production';
+    delete process.env.ALLOW_DEMO_PAYMENTS;
     const { getPaymentProvider, isOnlinePaymentEnabled } = loadService();
     expect(getPaymentProvider()).toBeNull();
     expect(isOnlinePaymentEnabled()).toBe(false);
+  });
+
+  // Hosts set NODE_ENV=production automatically, so a demo deployment needs a
+  // way through. It must be a deliberate one — these pin that near-misses and
+  // generic truthy values do NOT unlock simulated payments.
+  it.each(['true', '1', 'yes', 'I-UNDERSTAND-NO-MONEY-IS-COLLECTED', 'i-understand'])(
+    'is still refused in production when ALLOW_DEMO_PAYMENTS is %p',
+    (value) => {
+      process.env.PAYMENT_PROVIDER = 'demo';
+      process.env.NODE_ENV = 'production';
+      process.env.ALLOW_DEMO_PAYMENTS = value;
+      const { getPaymentProvider } = loadService();
+      expect(getPaymentProvider()).toBeNull();
+    }
+  );
+
+  it('is allowed in production only with the exact acknowledgement', () => {
+    process.env.PAYMENT_PROVIDER = 'demo';
+    process.env.NODE_ENV = 'production';
+    const { DEMO_PAYMENTS_ACK } = require('../services/payment.service');
+    process.env.ALLOW_DEMO_PAYMENTS = DEMO_PAYMENTS_ACK;
+    const { getPaymentProvider } = loadService();
+    expect(getPaymentProvider()?.name).toBe('demo');
+  });
+
+  it('does not unlock a real provider — the acknowledgement is demo-only', () => {
+    process.env.PAYMENT_PROVIDER = 'moyasar';
+    process.env.NODE_ENV = 'production';
+    process.env.ALLOW_DEMO_PAYMENTS = 'i-understand-no-money-is-collected';
+    delete process.env.MOYASAR_SECRET_KEY;
+    const { getPaymentProvider } = loadService();
+    expect(getPaymentProvider()).toBeNull();
   });
 
   it('never accepts a webhook — nothing may be settled unsigned', () => {

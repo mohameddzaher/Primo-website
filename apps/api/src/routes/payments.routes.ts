@@ -28,6 +28,10 @@ router.get(
       data: {
         online: provider !== null,
         provider: provider?.name ?? 'none',
+        // Lets the storefront label a demo deployment honestly. Anyone the
+        // client forwards the link to would otherwise have no way to tell that
+        // a completed "payment" never moved any money.
+        simulated: provider?.name === 'demo',
       },
     });
   })

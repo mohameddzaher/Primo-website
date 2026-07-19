@@ -1,0 +1,102 @@
+# ============================================
+# PRIMO — Render Blueprint
+# ============================================
+# Deploys the API and the storefront as two web services.
+#
+# Region: BOTH services are pinned to Frankfurt because the MongoDB Atlas
+# cluster lives there. Render defaults to Oregon, which would put every single
+# database query on a round trip across the Atlantic — with several queries per
+# request that is the difference between a fast store and an unusable one.
+# If you ever move the Atlas cluster, move these too.
+#
+# Plan: `starter`, not `free`. A free service sleeps after ~15 minutes idle and
+# the next visitor waits ~50s for it to wake — which is exactly what a demo
+# link handed to a client must never do.
+#
+# Secrets are NOT stored here. Values marked `sync: false` must be filled in
+# from the Render dashboard so they never enter the git history.
+
+services:
+  # ─── API ──────────────────────────────────────────────────────────────────
+  - type: web
+    name: primo-api
+    runtime: node
+    region: frankfurt
+    plan: starter
+    branch: main
+    buildCommand: npm ci && npm run build -w @primo/shared && npm run build -w @primo/api
+    startCommand: npm run start -w @primo/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_VERSION
+        value: v1
+
+      # Atlas connection string. Rotate the password BEFORE pasting it here —
+      # the previous one is still exposed in this repository's git history.
+      - key: MONGODB_URI
+        sync: false
+
+      # Must be at least 32 characters and different from each other; the API
+      # refuses to boot in production otherwise (see config/validateConfig).
+      # Let Render generate them — nobody needs to know these values.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+
+      # Full storefront origin INCLUDING https:// and with no trailing slash,
+      # e.g. https://primo-web.onrender.com — comma-separate to add more.
+      # Deliberately not wired with `fromService`: that yields a bare hostname
+      # with no scheme, which does not match a browser Origin header, and CORS
+      # would fail on every request with nothing obviously misconfigured.
+      - key: CORS_ORIGIN
+        sync: false
+
+      # ── Simulated payments (DEMO DEPLOYMENT ONLY) ────────────────────────
+      # Marks card / Apple Pay orders PAID without collecting any money, so the
+      # checkout journey can be shown end to end before a payment provider is
+      # contracted. Because NODE_ENV=production above would normally refuse it,
+      # the acknowledgement below is required as a second, deliberate step.
+      #
+      # BEFORE TAKING A SINGLE REAL ORDER: delete both of these, set
+      # PAYMENT_PROVIDER=moyasar, and add MOYASAR_SECRET_KEY +
+      # MOYASAR_WEBHOOK_SECRET.
+      - key: PAYMENT_PROVIDER
+        value: demo
+      - key: ALLOW_DEMO_PAYMENTS
+        value: i-understand-no-money-is-collected
+
+      # ── Email (optional) ─────────────────────────────────────────────────
+      # Leave unset and the store still works; order emails simply are not
+      # sent. Set all four to enable them.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+
+  # ─── Storefront ───────────────────────────────────────────────────────────
+  - type: web
+    name: primo-web
+    runtime: node
+    region: frankfurt
+    plan: starter
+    branch: main
+    buildCommand: npm ci && npm run build -w @primo/shared && npm run build -w @primo/web
+    startCommand: npm run start -w @primo/web
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Baked into the client bundle at BUILD time, so the storefront must be
+      # rebuilt (not just restarted) if the API URL ever changes.
+      # Note the required /api/v1 suffix.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
