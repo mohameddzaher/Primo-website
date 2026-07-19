@@ -27,7 +27,8 @@ import {
   Button,
   Checkbox,
   Select,
-  ProductGridSkeleton,
+  Skeleton,
+  ProductCardSkeleton,
   Card,
 } from '@/components/ui';
 import { cn, formatCurrency } from '@/lib/utils';
@@ -78,16 +79,6 @@ export default function ProductsPage() {
   const { t, isRtl } = useI18n();
   const { settings } = useSettings();
   const currency = settings.currency;
-
-  // Price bucket labels use the shared currency formatter so figures stay LTR.
-  const priceRangeLabel = (range: { min: number; max: number | '' }) => {
-    if (range.max === '') return t('shop.filter.priceOver', { min: formatCurrency(range.min, currency) });
-    if (range.min === 0) return t('shop.filter.priceUnder', { max: formatCurrency(range.max, currency) });
-    return t('shop.filter.priceBetween', {
-      min: formatCurrency(range.min, currency),
-      max: formatCurrency(range.max, currency),
-    });
-  };
 
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -234,7 +225,9 @@ export default function ProductsPage() {
       inStock: false,
       onSale: false,
       newArrivals: false,
-      sort: 'newest',
+      // Must match a real sortOptions value — 'newest' is not one, and left the
+      // sort <select> with no matching option and ?sort=newest in the URL.
+      sort: '-createdAt',
       page: 1,
     });
   };
@@ -486,41 +479,54 @@ export default function ProductsPage() {
     },
   ];
 
-  const FilterSection = ({
-    title,
-    section,
-    children,
-  }: {
-    title: string;
-    section: string;
-    children: React.ReactNode;
-  }) => (
-    <div className="py-4 border-t border-beige-200">
+  // Small pill showing how many constraints a section currently contributes.
+  const sectionBadge = (count: number) =>
+    count > 0 ? (
+      <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary-600 px-1.5 text-[11px] font-semibold text-white ltr-nums">
+        {count}
+      </span>
+    ) : null;
+
+  // NOTE: these are element factories, not components. Declaring them as
+  // components inside the render would give React a brand-new type on every
+  // render, remounting the subtree and dropping focus out of the custom
+  // min/max price inputs after a single keystroke.
+  const filterSection = (
+    title: string,
+    section: string,
+    children: React.ReactNode,
+    activeCount = 0
+  ) => (
+    <div className="border-t border-beige-200 py-3.5">
       <button
+        type="button"
         onClick={() => toggleSection(section)}
-        className="w-full flex items-center justify-between text-sm font-medium text-dark-900 mb-3"
+        aria-expanded={expandedSections[section]}
+        className="w-full flex items-center justify-between gap-2 text-sm font-semibold text-dark-900 hover:text-primary-700 transition-colors"
       >
-        {title}
+        <span className="flex items-center gap-2 text-start">
+          {title}
+          {sectionBadge(activeCount)}
+        </span>
         <HiChevronDown
           size={16}
           className={cn(
-            'rtl-flip transition-transform duration-200',
+            'flex-shrink-0 text-dark-400 transition-transform duration-200',
             expandedSections[section] ? 'rotate-180' : ''
           )}
         />
       </button>
-      {expandedSections[section] && (
-        <div>
-          {children}
-        </div>
-      )}
+      {expandedSections[section] && <div className="mt-3">{children}</div>}
     </div>
   );
 
-  const FilterContent = () => (
+  const filterPanel = (
     <>
       {/* Quick Filters */}
-      <div className="pb-4 space-y-3">
+      <div className="pb-3.5 pt-1 space-y-1">
+        <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-dark-400">
+          {t('shop.filter.quickFilters')}
+        </p>
         <label className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-beige-50 transition-colors">
           <input
             type="checkbox"
@@ -553,8 +559,10 @@ export default function ProductsPage() {
       </div>
 
       {/* Categories */}
-      <FilterSection title={t('nav.categories')} section="categories">
-        <div className="space-y-2 max-h-48 overflow-y-auto pe-2">
+      {filterSection(
+        t('nav.categories'),
+        'categories',
+        <div className="space-y-1 max-h-56 overflow-y-auto overscroll-contain pe-1">
           <label
             className={cn(
               'flex items-center gap-2 cursor-pointer p-2 rounded-lg transition-colors',
@@ -595,12 +603,15 @@ export default function ProductsPage() {
               )}
             </label>
           ))}
-        </div>
-      </FilterSection>
+        </div>,
+        filters.category ? 1 : 0
+      )}
 
       {/* Brands */}
-      <FilterSection title={t('nav.brands')} section="brands">
-        <div className="space-y-2 max-h-48 overflow-y-auto pe-2">
+      {filterSection(
+        t('nav.brands'),
+        'brands',
+        <div className="space-y-1 max-h-56 overflow-y-auto overscroll-contain pe-1">
           {brands?.map((brand: any) => {
             const isSelected = filters.brands.includes(brand.name);
             return (
@@ -631,12 +642,16 @@ export default function ProductsPage() {
               </label>
             );
           })}
-        </div>
-      </FilterSection>
+        </div>,
+        filters.brands.length
+      )}
 
       {/* Price Range */}
-      <FilterSection title={t('shop.filter.priceRange')} section="price">
-        <div className="space-y-2">
+      {filterSection(
+        t('shop.filter.priceRange'),
+        'price',
+        <>
+        <div className="space-y-1">
           {priceRanges.map((range) => (
             <label
               key={`${range.min}-${range.max}`}
@@ -658,7 +673,7 @@ export default function ProductsPage() {
                 onChange={() => handlePriceRange(range.min, range.max)}
                 className="sr-only"
               />
-              <span className="text-sm">{priceRangeLabel(range)}</span>
+              <span className="text-sm">{priceLabelNode(range.min, range.max)}</span>
             </label>
           ))}
         </div>
@@ -683,11 +698,15 @@ export default function ProductsPage() {
             />
           </div>
         </div>
-      </FilterSection>
+        </>,
+        filters.minPrice || filters.maxPrice ? 1 : 0
+      )}
 
       {/* Rating */}
-      <FilterSection title={t('shop.filter.customerRating')} section="rating">
-        <div className="space-y-2">
+      {filterSection(
+        t('shop.filter.customerRating'),
+        'rating',
+        <div className="space-y-1">
           {[4, 3, 2, 1].map((rating) => (
             <label
               key={rating}
@@ -724,10 +743,17 @@ export default function ProductsPage() {
               <span className="text-sm text-dark-600">{t('shop.filter.andUp')}</span>
             </label>
           ))}
-        </div>
-      </FilterSection>
+        </div>,
+        filters.rating ? 1 : 0
+      )}
     </>
   );
+
+  // Shared by the results and their loading skeletons so the two lay out identically.
+  const gridClassName =
+    viewMode === 'grid'
+      ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4'
+      : 'space-y-4';
 
   // Compute "Showing X–Y of Z items"
   const totalItems = pagination?.total || 0;
@@ -755,7 +781,7 @@ export default function ProductsPage() {
                   ? (categories?.find((c: any) => c._id === filters.category)?.name || t('nav.products'))
                   : t('shop.products.all')}
               </h1>
-              <p className="mt-0.5 text-sm text-dark-400">{countLabel}</p>
+              <p className="mt-0.5 text-sm text-dark-400">{t('shop.products.tagline')}</p>
             </div>
             {/* Inline search */}
             <div className="relative w-full sm:w-64">
@@ -847,11 +873,13 @@ export default function ProductsPage() {
         {/* Trust / benefit bar — reassurance right where the browsing starts */}
         <div className="border-t border-beige-100 bg-beige-50/70">
           <div className="container-custom">
-            <ul className="flex items-center gap-5 sm:gap-8 overflow-x-auto scrollbar-hide py-2.5">
+            {/* Centred at every width: the list wraps and centres its rows, and
+                each item keeps its icon+label together on one line. */}
+            <ul className="flex flex-wrap justify-center items-center gap-x-5 sm:gap-x-8 gap-y-1.5 py-2.5">
               {trustItems.map((item) => (
                 <li
                   key={item.id}
-                  className="flex-shrink-0 flex items-center gap-1.5 text-[11px] sm:text-xs text-dark-600"
+                  className="flex items-center gap-1.5 text-center text-[11px] sm:text-xs text-dark-600"
                 >
                   {item.icon}
                   <span>{item.label}</span>
@@ -864,28 +892,48 @@ export default function ProductsPage() {
 
       <div className="container-custom py-8">
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar Filters - Desktop */}
+          {/* Sidebar Filters - Desktop.
+              `sticky top-24` pins the panel under the fixed header; the panel is
+              a flex column capped at the remaining viewport height, so only the
+              inner body scrolls (`overflow-y-auto`) while the heading and the
+              clear-all footer stay put. The product grid scrolls independently
+              because the sticky element never grows past the viewport. */}
           <aside className="hidden lg:block w-72 flex-shrink-0">
-            <Card padding="md" className="sticky top-24">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-dark-900">{t('shop.filter.title')}</h2>
+            <div className="sticky top-24 flex max-h-[calc(100vh-7rem)] flex-col overflow-hidden rounded-xl border border-beige-200 bg-white shadow-soft">
+              <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-beige-200 px-4 py-3">
+                <h2 className="flex items-center gap-2 font-semibold text-dark-900">
+                  <HiOutlineFilter size={16} className="text-primary-600" />
+                  {t('shop.filter.title')}
+                  {sectionBadge(activeFilterCount)}
+                </h2>
                 {hasActiveFilters && (
                   <button
+                    type="button"
                     onClick={clearFilters}
-                    className="text-sm text-primary-600 hover:text-primary-700"
+                    className="text-sm font-medium text-primary-600 hover:text-primary-700 underline underline-offset-2"
                   >
                     {t('shop.filter.clearAll')}
                   </button>
                 )}
               </div>
-              <FilterContent />
-            </Card>
+              <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+                {filterPanel}
+              </div>
+              {hasActiveFilters && (
+                <div className="flex-shrink-0 border-t border-beige-200 bg-beige-50/60 px-4 py-2.5">
+                  <p className="text-xs text-dark-500">
+                    {t('shop.filter.activeCount', { count: activeFilterCount })}
+                  </p>
+                </div>
+              )}
+            </div>
           </aside>
 
           {/* Main Content */}
           <div className="flex-1">
-            {/* Toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            {/* Toolbar — filter entry, result count, sort and view mode read as
+                a single control bar rather than three floating widgets. */}
+            <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-beige-200 bg-white px-3 py-2.5 shadow-soft">
               {/* Mobile filter button */}
               <Button
                 variant="secondary"
@@ -896,11 +944,19 @@ export default function ProductsPage() {
               >
                 {t('shop.filter.title')}
                 {activeFilterCount > 0 && (
-                  <span className="ms-1 w-5 h-5 bg-primary-600 text-white text-xs rounded-full flex items-center justify-center">
+                  <span className="ms-1 w-5 h-5 bg-primary-600 text-white text-xs rounded-full flex items-center justify-center ltr-nums">
                     {activeFilterCount}
                   </span>
                 )}
               </Button>
+
+              {/* Result count */}
+              <p
+                aria-live="polite"
+                className="text-sm text-dark-600 ltr-nums"
+              >
+                {countLabel}
+              </p>
 
               {/* Sort */}
               <div className="flex items-center gap-2 ms-auto">
@@ -909,7 +965,7 @@ export default function ProductsPage() {
                   value={filters.sort}
                   onChange={(e) => handleFilterChange('sort', e.target.value)}
                   aria-label={t('shop.a11y.sortProducts')}
-                  className="px-3 py-2 text-sm border border-beige-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                  className="px-3 py-1.5 text-sm border border-beige-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
                 >
                   {sortOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -926,7 +982,7 @@ export default function ProductsPage() {
                   aria-label={t('shop.a11y.gridView')}
                   onClick={() => setViewMode('grid')}
                   className={cn(
-                    'p-2 rounded-md transition-colors',
+                    'p-1.5 rounded-md transition-colors',
                     viewMode === 'grid'
                       ? 'bg-white text-dark-900 shadow-sm'
                       : 'text-dark-500 hover:text-dark-700'
@@ -939,7 +995,7 @@ export default function ProductsPage() {
                   aria-label={t('shop.a11y.listView')}
                   onClick={() => setViewMode('list')}
                   className={cn(
-                    'p-2 rounded-md transition-colors',
+                    'p-1.5 rounded-md transition-colors',
                     viewMode === 'list'
                       ? 'bg-white text-dark-900 shadow-sm'
                       : 'text-dark-500 hover:text-dark-700'
@@ -952,26 +1008,92 @@ export default function ProductsPage() {
 
             {/* Products Grid */}
             {isLoadingProducts ? (
-              <ProductGridSkeleton count={12} />
+              // Skeletons reuse the exact grid/list classes of the real results
+              // so nothing shifts when the data lands.
+              <div className={gridClassName} aria-busy="true">
+                {Array.from({ length: 12 }).map((_, i) =>
+                  viewMode === 'grid' ? (
+                    <ProductCardSkeleton key={i} />
+                  ) : (
+                    <div
+                      key={i}
+                      className="flex items-center gap-4 rounded-xl border border-beige-200 bg-white p-3"
+                    >
+                      <Skeleton variant="rectangular" className="h-24 w-24 flex-shrink-0 rounded-lg" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton variant="text" width="30%" height={12} />
+                        <Skeleton variant="text" lines={2} />
+                        <Skeleton variant="text" width={90} height={18} />
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
             ) : products.length === 0 ? (
-              <Card padding="lg" className="text-center py-16">
-                <h3 className="text-lg font-medium text-dark-900">
+              <Card padding="lg" className="py-14 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-beige-100">
+                  <HiOutlineSearch className="text-dark-400" size={26} />
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-dark-900">
                   {t('shop.products.noneFound')}
                 </h3>
-                <p className="mt-2 text-dark-500">
+                <p className="mt-1.5 text-sm text-dark-500">
                   {t('shop.products.noneFoundHint')}
                 </p>
-                <Button variant="primary" className="mt-4" onClick={clearFilters}>
-                  {t('shop.filter.clearFilters')}
-                </Button>
+                <p className="mx-auto mt-1 max-w-md text-sm text-dark-400">
+                  {t('shop.products.noneFoundTips')}
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  {hasActiveFilters && (
+                    <Button variant="primary" onClick={clearFilters}>
+                      {t('shop.filter.clearFilters')}
+                    </Button>
+                  )}
+                  {filters.search && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleFilterChange('search', '')}
+                    >
+                      {t('shop.a11y.clearSearch')}
+                    </Button>
+                  )}
+                  <Button
+                    variant={hasActiveFilters || filters.search ? 'secondary' : 'primary'}
+                    onClick={() => {
+                      clearFilters();
+                      setViewMode('grid');
+                    }}
+                  >
+                    {t('shop.browseProducts')}
+                  </Button>
+                </div>
+
+                {/* Suggested next steps — the same quick picks from the header,
+                    so a dead end still offers a way back into the catalogue. */}
+                <div className="mt-6 border-t border-beige-200 pt-5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-dark-400">
+                    {t('home.quickPicks')}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    {quickPicks.map((pick) => (
+                      <button
+                        key={pick.id}
+                        type="button"
+                        onClick={pick.apply}
+                        aria-label={pick.ariaLabel}
+                        className="rounded-full border border-beige-300 bg-white px-3 py-1.5 text-xs font-medium text-dark-600 transition-colors hover:border-primary-400 hover:text-primary-700"
+                      >
+                        {pick.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </Card>
             ) : (
               <>
                 <div
                   className={cn(
-                    viewMode === 'grid'
-                      ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4'
-                      : 'space-y-4',
+                    gridClassName,
                     isFetching && 'opacity-60 transition-opacity duration-200'
                   )}
                 >
@@ -1072,7 +1194,10 @@ export default function ProductsPage() {
               className="fixed inset-y-0 start-0 w-80 bg-white shadow-soft-xl z-50 lg:hidden flex flex-col"
             >
               <div className="sticky top-0 bg-white border-b border-beige-200 p-4 flex items-center justify-between">
-                <h2 className="font-semibold text-dark-900">{t('shop.filter.title')}</h2>
+                <h2 className="flex items-center gap-2 font-semibold text-dark-900">
+                  {t('shop.filter.title')}
+                  {sectionBadge(activeFilterCount)}
+                </h2>
                 <div className="flex items-center gap-2">
                   {hasActiveFilters && (
                     <button
@@ -1092,8 +1217,8 @@ export default function ProductsPage() {
                   </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <FilterContent />
+              <div className="flex-1 overflow-y-auto overscroll-contain p-4">
+                {filterPanel}
               </div>
               <div className="sticky bottom-0 bg-white border-t border-beige-200 p-4">
                 <Button fullWidth onClick={() => setShowFilters(false)}>

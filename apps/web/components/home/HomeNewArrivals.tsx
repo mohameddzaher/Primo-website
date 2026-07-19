@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { HiArrowRight, HiChevronLeft, HiChevronRight } from 'react-icons/hi';
 import { productsApi } from '@/lib/api';
 import { ProductCard } from '@/components/product/ProductCard';
+import { RAIL_CARD_WIDTH } from './ProductRail';
 import { useCmsContent } from '@/lib/use-cms-content';
 import { useI18n } from '@/lib/i18n';
 
@@ -65,6 +66,11 @@ export function HomeNewArrivals() {
             <h2 className="mt-1 text-xl sm:text-2xl font-display font-bold text-dark-900">
               {settings.title || defaultSettings.title}
             </h2>
+            {/* Short accent rule — matches the other section headers */}
+            <span
+              aria-hidden
+              className="mt-2.5 block h-0.5 w-10 rounded-full bg-primary-600"
+            />
           </div>
           <div className="flex items-center gap-2">
             {/* Scroll arrows */}
@@ -85,7 +91,7 @@ export function HomeNewArrivals() {
               <HiChevronRight size={18} className="rtl-flip" />
             </button>
             <Link
-              href="/products?sort=newest"
+              href="/products?sort=-createdAt"
               className="flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
             >
               {t('common.viewAll')} <HiArrowRight size={14} className="rtl-flip" />
@@ -102,13 +108,13 @@ export function HomeNewArrivals() {
             ? Array.from({ length: 6 }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex-shrink-0 w-[140px] sm:w-[160px] md:w-[180px] h-[260px] bg-beige-100 rounded-xl animate-pulse"
+                  className="flex-shrink-0  h-[260px] bg-beige-100 rounded-xl animate-pulse"
                 />
               ))
             : products.map((product: any) => (
                 <div
                   key={product._id}
-                  className="flex-shrink-0 w-[140px] sm:w-[160px] md:w-[180px]"
+                  className={`flex-shrink-0 ${RAIL_CARD_WIDTH}`}
                 >
                   <ProductCard product={product} variant="compact" />
                 </div>

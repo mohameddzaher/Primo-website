@@ -466,9 +466,70 @@ export const newsletterApi = {
     apiPost<any>('/cms/newsletter/unsubscribe', { email }),
 };
 
+// ── Contact & support ───────────────────────────────────────────────────────
+// The storefront has two forms (a general enquiry and a complaint) writing to
+// the same collection, told apart by `type`. The admin inbox lives at
+// /admin/support and reads the same endpoints.
+export type ContactType = 'general' | 'complaint';
+
+export type ComplaintCategory =
+  | 'delivery'
+  | 'product_quality'
+  | 'damaged'
+  | 'billing'
+  | 'warranty'
+  | 'staff'
+  | 'other';
+
+export type ContactStatus = 'new' | 'in_progress' | 'resolved' | 'closed';
+export type ContactPriority = 'low' | 'medium' | 'high';
+
+export interface ContactSubmission {
+  type: ContactType;
+  name: string;
+  email: string;
+  phone?: string;
+  subject?: string;
+  message: string;
+  orderNumber?: string;
+  category?: ComplaintCategory;
+}
+
+export interface ContactMessageRecord {
+  _id: string;
+  type: ContactType;
+  name: string;
+  email: string;
+  phone?: string;
+  subject: string;
+  message: string;
+  status: ContactStatus;
+  priority: ContactPriority;
+  orderNumber?: string;
+  category?: ComplaintCategory;
+  adminNote?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const contactApi = {
-  submit: (data: { name: string; email: string; phone?: string; subject: string; message: string }) =>
-    apiPost<any>('/cms/contact', data),
+  submit: (data: ContactSubmission) => apiPost<any>('/cms/contact', data),
+};
+
+export const supportApi = {
+  getMessages: (params: {
+    page?: number;
+    limit?: number;
+    type?: string;
+    status?: string;
+    search?: string;
+  }) => apiGetPaginated<ContactMessageRecord[]>('/cms/contact', params),
+
+  updateMessage: (
+    id: string,
+    data: { status?: ContactStatus; priority?: ContactPriority; adminNote?: string }
+  ) => apiPatch<ContactMessageRecord>(`/cms/contact/${id}`, data),
 };
 
 export const cmsApi = {

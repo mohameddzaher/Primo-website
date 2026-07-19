@@ -1,6 +1,8 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { HiOutlineChatAlt2, HiOutlinePhone } from 'react-icons/hi';
+import { ContentIcon } from '@/components/ui';
 import { useCmsContent } from '@/lib/use-cms-content';
 import { useT } from '@/lib/i18n';
 
@@ -9,12 +11,12 @@ const defaultData = {
   title: 'The PRIMO Difference',
   description: 'We are committed to providing you with the best shopping experience for premium home appliances.',
   reasons: [
-    { icon: '✅', title: '100% Authentic Products', description: 'We are an authorized retailer for all brands. Every product comes with official warranty and original packaging.' },
-    { icon: '💰', title: 'Best Price Guarantee', description: 'Find a lower price elsewhere? We will match it. Plus, enjoy exclusive discounts and member benefits.' },
-    { icon: '🚀', title: 'Fast & Free Delivery', description: 'Free shipping on orders over SAR 500. Express delivery available across Riyadh and Jeddah.' },
-    { icon: '🛡️', title: 'Extended Warranty', description: 'Get up to 2 years warranty on all products. Our extended warranty covers parts and labor costs.' },
-    { icon: '↩️', title: 'Easy Returns', description: '30-day hassle-free returns. Not satisfied? Return it for a full refund, no questions asked.' },
-    { icon: '💬', title: '24/7 Expert Support', description: 'Our dedicated team of experts is available around the clock to help you with any questions.' },
+    { icon: 'badge-check', title: '100% Authentic Products', description: 'We are an authorized retailer for all brands. Every product comes with official warranty and original packaging.' },
+    { icon: 'cash', title: 'Best Price Guarantee', description: 'Find a lower price elsewhere? We will match it. Plus, enjoy exclusive discounts and member benefits.' },
+    { icon: 'truck', title: 'Fast & Free Delivery', description: 'Free shipping on orders over SAR 500. Express delivery available across Riyadh and Jeddah.' },
+    { icon: 'shield', title: 'Extended Warranty', description: 'Get up to 2 years warranty on all products. Our extended warranty covers parts and labor costs.' },
+    { icon: 'refresh', title: 'Easy Returns', description: '30-day hassle-free returns. Not satisfied? Return it for a full refund, no questions asked.' },
+    { icon: 'chat', title: '24/7 Expert Support', description: 'Our dedicated team of experts is available around the clock to help you with any questions.' },
   ],
   cta: {
     title: 'Still Have Questions?',
@@ -84,7 +86,7 @@ export function WhyChooseUs() {
               className="group p-6 rounded-2xl border border-beige-200 hover:border-primary-200 hover:shadow-soft transition-all duration-300"
             >
               <div className="w-14 h-14 rounded-xl bg-primary-50 group-hover:bg-primary-100 flex items-center justify-center text-primary-600 transition-colors mb-4">
-                <span className="text-2xl">{reason.icon}</span>
+                <ContentIcon name={reason.icon} size={26} />
               </div>
               <h3 className="text-lg font-semibold text-dark-900 group-hover:text-primary-600 transition-colors">
                 {reason.title}
@@ -102,27 +104,41 @@ export function WhyChooseUs() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.4 }}
-          className="mt-12 p-8 md:p-12 rounded-2xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-center"
+          className="mt-12 rounded-2xl bg-white border border-beige-200 shadow-soft overflow-hidden"
         >
-          <h3 className="text-2xl md:text-3xl font-display font-semibold">
-            {content.cta.title}
-          </h3>
-          <p className="mt-2 text-white/80 max-w-xl mx-auto">
-            {content.cta.description}
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-4">
-            <a
-              href={`tel:${content.cta.phone.replace(/\s/g, '')}`}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-600 rounded-lg font-medium hover:bg-white/90 transition-colors"
-            >
-              {t('home.callUs')}: <span className="ltr-nums">{content.cta.phone}</span>
-            </a>
-            <a
-              href={content.cta.buttonLink}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 text-white rounded-lg font-medium hover:bg-white/20 transition-colors border border-white/20"
-            >
-              {content.cta.buttonText}
-            </a>
+          {/* Thin accent edge instead of a full colour wash — the section sits
+              between other light bands, and a solid block was overpowering them. */}
+          <div className="h-1 w-full bg-gradient-to-r from-primary-500 to-primary-700" />
+
+          <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center gap-6">
+            <span className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
+              <HiOutlineChatAlt2 size={24} />
+            </span>
+
+            <div className="flex-1 min-w-0 text-start">
+              <h3 className="text-xl md:text-2xl font-display font-bold text-dark-900">
+                {content.cta.title}
+              </h3>
+              <p className="mt-1.5 text-sm text-dark-500 max-w-xl">
+                {content.cta.description}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 md:flex-shrink-0">
+              <a
+                href={`tel:${content.cta.phone.replace(/\s/g, '')}`}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-dark-900 text-white text-sm font-semibold hover:bg-dark-800 transition-colors"
+              >
+                <HiOutlinePhone size={16} />
+                <span className="ltr-nums">{content.cta.phone}</span>
+              </a>
+              <a
+                href={content.cta.buttonLink}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-beige-300 text-dark-700 text-sm font-semibold hover:border-primary-400 hover:text-primary-600 transition-colors"
+              >
+                {content.cta.buttonText}
+              </a>
+            </div>
           </div>
         </motion.div>
       </div>

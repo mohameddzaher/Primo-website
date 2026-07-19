@@ -141,7 +141,7 @@ export default function CartPage() {
 
   if (isSyncing) {
     return (
-      <div className="flex items-center justify-center py-16">
+      <div className="min-h-screen bg-beige-50 flex items-center justify-center px-4 py-16">
         <div className="text-center">
           <Spinner size="lg" />
           <p className="mt-4 text-dark-600">{t('shop.cart.syncing')}</p>
@@ -152,7 +152,7 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="flex items-center justify-center py-16">
+      <div className="min-h-screen bg-beige-50 flex items-center justify-center px-4 py-16">
         <div className="text-center">
           <HiOutlineShoppingCart className="mx-auto h-20 w-20 text-beige-300 mb-4" />
           <h2 className="text-xl font-semibold text-dark-900 mb-2">{t('cart.empty')}</h2>
@@ -166,10 +166,14 @@ export default function CartPage() {
   }
 
   return (
-    <div>
-      <h2 className="text-2xl font-semibold text-dark-900 mb-6">
-        {t('shop.cart.titleWithCount', { count: items.length })}
-      </h2>
+    // This page used to live under /account, which supplied the page container.
+    // Standing alone at /cart it must provide its own, or the content sits flush
+    // against the viewport edges.
+    <div className="min-h-screen bg-beige-50">
+      <div className="container-custom py-8">
+        <h2 className="text-2xl font-semibold text-dark-900 mb-6">
+          {t('shop.cart.titleWithCount', { count: items.length })}
+        </h2>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Cart Items */}
@@ -387,6 +391,7 @@ export default function CartPage() {
           </Card>
         </div>
       </div>
+    </div>
     </div>
   );
 }

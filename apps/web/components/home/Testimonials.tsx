@@ -243,7 +243,7 @@ export function Testimonials() {
                 className="mt-6 text-center"
               >
                 <Link
-                  href="/products?sort=rating"
+                  href="/products?sort=-averageRating"
                   className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
                 >
                   {t('home.shopTopRated')}

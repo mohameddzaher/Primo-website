@@ -81,11 +81,19 @@ describe('cacheResponse', () => {
     expect(res2.headers['x-cache']).toBe('MISS');
   });
 
-  it('sets a Cache-Control header so the browser can skip the request', () => {
+  it('tells browsers to revalidate but lets shared caches hold the response', () => {
+    // This content is admin-editable. A private browser cache can't be purged
+    // by invalidateOnWrite(), so allowing one would keep showing stale content
+    // after an edit. Shared caches (CDN) are fine — they honour s-maxage and
+    // sit in front of a server we can purge.
     const mw = cacheResponse('categories', 120);
     const res = mockRes();
     mw(get('/api/v1/categories'), res, (() => res.json({ ok: 1 })) as unknown as NextFunction);
-    expect(res.headers['cache-control']).toContain('max-age=120');
+
+    const header = res.headers['cache-control'];
+    expect(header).toContain('max-age=0');
+    expect(header).toContain('must-revalidate');
+    expect(header).toContain('s-maxage=120');
   });
 
   it('does not cache non-GET requests', () => {

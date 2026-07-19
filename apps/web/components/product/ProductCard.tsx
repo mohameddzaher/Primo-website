@@ -10,6 +10,7 @@ import {
   HiHeart,
   HiOutlineShoppingBag,
   HiOutlineEye,
+  HiStar,
 } from 'react-icons/hi';
 import { cn, formatCurrency, getDiscountedPrice, getStockStatus } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
@@ -188,23 +189,24 @@ export function ProductCard({
     return (
       <Link href={productHref} className="block h-full">
         <motion.div
-          className="group product-card product-card-compact h-full"
+          className="group h-full flex flex-col overflow-hidden rounded-xl bg-white border border-beige-200 hover:border-primary-300 hover:shadow-soft-lg transition-all duration-200"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
-          whileHover={{ y: -2 }}
+          whileHover={{ y: -3 }}
           transition={{ duration: 0.2 }}
         >
-          {/* Image container - smaller aspect ratio */}
-          <div className="relative aspect-square overflow-hidden bg-beige-100">
+          {/* Product shots are white-background studio images, so `contain`
+              shows the whole appliance instead of cropping into it. */}
+          <div className="relative aspect-square overflow-hidden bg-white">
             {/* Badges */}
             <div className="absolute top-2 start-2 z-10 flex flex-col gap-1">
               {product.discount && product.discount > 0 && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-error-500 text-white">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-error-500 text-white shadow-sm">
                   -{product.discount}%
                 </span>
               )}
               {product.isNew && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-500 text-white">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary-500 text-white shadow-sm">
                   {t('shop.product.newBadge')}
                 </span>
               )}
@@ -216,13 +218,13 @@ export function ProductCard({
               onClick={handleToggleWishlist}
               aria-label={isWishlisted ? t('product.removeFromWishlist') : t('product.addToWishlist')}
               className={cn(
-                'absolute top-2 end-2 z-10 p-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-soft transition-all',
+                'absolute top-2 end-2 z-10 p-2 rounded-full bg-white/95 backdrop-blur-sm shadow-soft ring-1 ring-black/5 transition-all',
                 isWishlisted
                   ? 'text-error-500'
                   : 'text-dark-400 hover:text-error-500'
               )}
             >
-              {isWishlisted ? <HiHeart size={14} /> : <HiOutlineHeart size={14} />}
+              {isWishlisted ? <HiHeart size={15} /> : <HiOutlineHeart size={15} />}
             </button>
 
             {/* Image */}
@@ -232,12 +234,12 @@ export function ProductCard({
                 alt={product.images[0].alt || product.title}
                 fill
                 className={cn(
-                  'object-cover transition-all duration-500',
+                  'object-contain p-3 transition-all duration-500 group-hover:scale-105',
                   imageLoaded ? 'opacity-100' : 'opacity-0'
                 )}
                 onLoad={() => setImageLoaded(true)}
                 onError={() => setImgError(true)}
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw"
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 220px"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-beige-400 bg-beige-100">
@@ -258,75 +260,78 @@ export function ProductCard({
                   type="button"
                   onClick={handleAddToCart}
                   disabled={productStock === 0}
-                  className="w-full flex items-center justify-center gap-1 py-1.5 bg-dark-900 text-white text-xs font-medium rounded hover:bg-dark-800 disabled:bg-dark-400 disabled:cursor-not-allowed transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 bg-dark-900 text-white text-[12px] font-semibold rounded-lg shadow-soft hover:bg-dark-800 disabled:bg-dark-400 disabled:cursor-not-allowed transition-colors"
                 >
-                  <HiOutlineShoppingBag size={12} />
+                  <HiOutlineShoppingBag size={14} />
                   {productStock === 0 ? t('product.outOfStock') : t('shop.product.add')}
                 </button>
               </motion.div>
             )}
           </div>
 
-          {/* Content - compact */}
-          <div className="p-2 flex-1 flex flex-col">
+          {/* Content */}
+          <div className="p-3 flex-1 flex flex-col">
             {/* Brand */}
             {product.brand && (
-              <p className="text-[9px] text-dark-500 uppercase tracking-wide truncate">
+              <p className="text-[10px] font-medium text-dark-400 uppercase tracking-wide truncate">
                 {product.brand}
               </p>
             )}
 
             {/* Title */}
-            <h3 className="mt-0.5 text-[11px] sm:text-xs font-medium text-dark-900 line-clamp-2 group-hover:text-primary-600 transition-colors leading-tight min-h-[2.5em]">
+            <h3 className="mt-1 text-[13px] font-medium text-dark-900 line-clamp-2 group-hover:text-primary-600 transition-colors leading-snug min-h-[2.6em]">
               {product.title}
             </h3>
 
-            {/* Rating - compact */}
+            {/* Rating */}
             {product.averageRating !== undefined && product.averageRating > 0 && (
-              <div className="mt-1 flex items-center gap-1">
-                <span className="text-yellow-400 text-[10px]">★</span>
-                <span className="text-[10px] text-dark-600">{product.averageRating.toFixed(1)}</span>
-                {product.reviewCount && (
-                  <span className="text-[9px] text-dark-400">({product.reviewCount})</span>
-                )}
+              <div className="mt-1.5 flex items-center gap-1">
+                <HiStar size={13} className="text-yellow-400" />
+                <span className="text-[11px] font-medium text-dark-700 ltr-nums">
+                  {product.averageRating.toFixed(1)}
+                </span>
+                {product.reviewCount ? (
+                  <span className="text-[11px] text-dark-400 ltr-nums">({product.reviewCount})</span>
+                ) : null}
               </div>
             )}
 
-            {/* Price - pushed to bottom */}
-            <div className="mt-auto pt-1.5 flex items-center gap-1 flex-wrap">
-              <span className="text-xs sm:text-sm font-bold text-dark-900 ltr-nums">
-                {formatCurrency(finalPrice)}
-              </span>
-              {product.discount && product.discount > 0 && (
-                <span className="text-[10px] text-dark-400 line-through ltr-nums">
-                  {formatCurrency(product.price)}
+            {/* Price */}
+            <div className="mt-auto pt-2">
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-[15px] font-bold text-dark-900 ltr-nums">
+                  {formatCurrency(finalPrice)}
                 </span>
+                {product.discount && product.discount > 0 && (
+                  <span className="text-[11px] text-dark-400 line-through ltr-nums">
+                    {formatCurrency(product.price)}
+                  </span>
+                )}
+              </div>
+
+              {/* ONE supporting line, not three stacked micro-lines. Scarcity
+                  outranks the delivery promise when stock is genuinely low. */}
+              <p
+                className={cn(
+                  'mt-1 text-[11px] leading-tight truncate',
+                  isLowStock
+                    ? 'text-orange-600 font-medium'
+                    : qualifiesForFreeShipping
+                    ? 'text-success-600'
+                    : 'text-dark-500'
+                )}
+              >
+                {isLowStock
+                  ? t('product.lowStock', { count: productStock })
+                  : deliveryPromise}
+              </p>
+
+              {hasVariants && (
+                <p className="mt-0.5 text-[11px] leading-tight text-primary-600">
+                  {t('shop.product.optionsAvailable', { count: variantCount })}
+                </p>
               )}
             </div>
-
-            {/* Options hint */}
-            {hasVariants && (
-              <p className="mt-0.5 text-[9px] leading-tight text-dark-500">
-                {t('shop.product.optionsAvailable', { count: variantCount })}
-              </p>
-            )}
-
-            {/* Delivery promise */}
-            <p
-              className={cn(
-                'mt-0.5 text-[9px] leading-tight',
-                qualifiesForFreeShipping ? 'text-success-600' : 'text-dark-500'
-              )}
-            >
-              {deliveryPromise}
-            </p>
-
-            {/* Low-stock urgency */}
-            {isLowStock && (
-              <p className="text-[9px] leading-tight text-orange-600 font-medium">
-                {t('product.lowStock', { count: productStock })}
-              </p>
-            )}
           </div>
         </motion.div>
       </Link>

@@ -24,6 +24,7 @@ import {
   HiChevronLeft,
   HiChevronRight,
   HiOutlineChatAlt2,
+  HiOutlineInbox,
   HiOutlineLibrary,
   HiOutlineCube,
   HiOutlineCalculator,
@@ -44,6 +45,7 @@ const navigation = [
   { name: 'Brands', href: '/admin/brands', icon: HiOutlineLibrary },
   { name: 'Customers', href: '/admin/customers', icon: HiOutlineUsers },
   { name: 'Reviews', href: '/admin/reviews', icon: HiOutlineStar },
+  { name: 'Support', href: '/admin/support', icon: HiOutlineInbox },
 ];
 
 const operationsNav = [

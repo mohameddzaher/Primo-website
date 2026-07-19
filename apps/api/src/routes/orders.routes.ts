@@ -478,17 +478,24 @@ router.post(
     // Check for referral discount (first order only)
     let referralDiscount = 0;
     let referralApplied = false;
-    const existingOrdersCount = await Order.countDocuments({ userId: req.userId });
-    if (existingOrdersCount === 0) {
-      // This is the user's first order - check for pending referral
-      const pendingReferral = await Referral.findOne({
-        referee: req.userId,
-        status: 'pending',
-      });
+    // Gated on the admin toggle, exactly like the loyalty block below. Without
+    // this the referral discount was granted even with the programme switched
+    // off in Settings — the toggle looked functional but silently gave money away.
+    if (settings.enableReferralProgram) {
+      const existingOrdersCount = await Order.countDocuments({ userId: req.userId });
+      if (existingOrdersCount === 0) {
+        // This is the user's first order - check for pending referral
+        const pendingReferral = await Referral.findOne({
+          referee: req.userId,
+          status: 'pending',
+        });
 
-      if (pendingReferral) {
-        referralDiscount = pendingReferral.refereeDiscount || 100;
-        referralApplied = true;
+        if (pendingReferral) {
+          // Fall back to the configured reward, not a hardcoded 100.
+          referralDiscount =
+            pendingReferral.refereeDiscount || settings.referralRewardAmount || 0;
+          referralApplied = referralDiscount > 0;
+        }
       }
     }
 
@@ -632,7 +639,9 @@ router.post(
       order._id.toString()
     ).catch(console.error);
 
-    // Handle referral completion for first-time orders
+    // Handle referral completion for first-time orders.
+    // Gated on the same admin toggle as the discount above — otherwise turning
+    // the programme off would still pay out referrer credit and bonus points.
     try {
       // Check if this is the user's first order
       const existingOrdersCount = await Order.countDocuments({
@@ -640,7 +649,7 @@ router.post(
         _id: { $ne: order._id },
       });
 
-      if (existingOrdersCount === 0) {
+      if (settings.enableReferralProgram && existingOrdersCount === 0) {
         // This is the user's first order — complete any pending referral.
         const minOrderAmount = settings.referralMinOrderAmount || 500;
 

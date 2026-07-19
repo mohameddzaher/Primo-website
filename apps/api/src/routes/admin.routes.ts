@@ -12,11 +12,48 @@ import { Category } from '../models/Category';
 import { AuditLog } from '../models/AuditLog';
 import { Settings } from '../models/Settings';
 import { authenticate, requireAdmin, requireSuperAdmin, requirePermission, AuthRequest } from '../middleware/auth';
+import { invalidateCache, cacheStats } from '../middleware/cache';
 import { validate } from '../middleware/validate';
 import { asyncHandler, NotFoundError, BadRequestError, ForbiddenError } from '../middleware/errorHandler';
 import * as analyticsService from '../services/analytics.service';
 
 const router = Router();
+
+// ========== CACHE ==========
+
+/**
+ * Flush the public response cache.
+ *
+ * Writes made THROUGH the API purge themselves automatically (see
+ * invalidateOnWrite). This exists for changes that bypass the API entirely —
+ * a seed script, a migration, or an edit made straight in the database — where
+ * nothing in this process knows the data moved and the cache would otherwise
+ * serve stale content until its TTL expired.
+ */
+router.post(
+  '/cache/flush',
+  authenticate,
+  requireSuperAdmin,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const before = cacheStats().size;
+    invalidateCache(); // no tags = flush everything
+
+    await AuditLog.create({
+      userId: req.userId,
+      action: 'update',
+      resource: 'settings',
+      resourceId: 'cache',
+      newValue: { flushedEntries: before },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      data: { flushed: before },
+    });
+  })
+);
 
 // ========== DASHBOARD ==========
 

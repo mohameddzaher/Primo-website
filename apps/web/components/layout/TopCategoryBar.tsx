@@ -53,73 +53,78 @@ export function TopCategoryBar() {
   return (
     <div className="border-t border-beige-100 bg-white shadow-sm">
       <div className="container-custom">
-        <div className="flex items-center overflow-x-auto scrollbar-hide gap-1 py-0">
-          {/* All Products link */}
-          <Link
-            href="/products"
-            className={cn(
-              'flex-shrink-0 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
-              pathname === '/products' && !activeCategoryId
-                ? 'text-primary-600 border-primary-600'
-                : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
-            )}
-          >
-            {t('home.allProducts')}
-          </Link>
+        {/* The scroll container stays full width; the inner `w-max mx-auto`
+            track centres the items while they fit and, once they overflow,
+            collapses to the leading edge so nothing is centre-cropped. */}
+        <div className="overflow-x-auto scrollbar-hide">
+          <div className="flex w-max mx-auto items-center gap-1 py-0">
+            {/* All Products link */}
+            <Link
+              href="/products"
+              className={cn(
+                'flex-shrink-0 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
+                pathname === '/products' && !activeCategoryId
+                  ? 'text-primary-600 border-primary-600'
+                  : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
+              )}
+            >
+              {t('home.allProducts')}
+            </Link>
 
-          <div className="h-3 w-px bg-beige-200 flex-shrink-0" />
+            <div className="h-3 w-px bg-beige-200 flex-shrink-0" />
 
-          {topCategories.map((category: any) => {
-            const isActive = activeCategoryId === category._id || activeCategoryId === category.slug;
-            return (
-              <Link
-                key={category._id}
-                href={`/products?category=${category._id}`}
-                className={cn(
-                  'flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
-                  isActive
-                    ? 'text-primary-600 border-primary-600'
-                    : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
-                )}
-              >
-                {category.icon && (
-                  <span className="text-sm">{category.icon}</span>
-                )}
-                {category.name}
-              </Link>
-            );
-          })}
+            {topCategories.map((category: any) => {
+              const isActive = activeCategoryId === category._id || activeCategoryId === category.slug;
+              return (
+                <Link
+                  key={category._id}
+                  href={`/products?category=${category._id}`}
+                  className={cn(
+                    'flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
+                    isActive
+                      ? 'text-primary-600 border-primary-600'
+                      : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
+                  )}
+                >
+                  {category.icon && (
+                    <span className="text-sm">{category.icon}</span>
+                  )}
+                  {category.name}
+                </Link>
+              );
+            })}
 
-          {/* Campaign entry points live here alongside the categories — they are
-              navigation, not merchandising, so they belong in the header rather
-              than as a separate strip pushing the hero artwork down the page. */}
-          <div className="h-3 w-px bg-beige-200 flex-shrink-0" />
+            {/* Campaign entry points live here alongside the categories — they are
+                navigation, not merchandising, so they belong in the header rather
+                than as a separate strip pushing the hero artwork down the page. */}
+            <div className="h-3 w-px bg-beige-200 flex-shrink-0" />
 
-          <Link
-            href="/products?onSale=true"
-            className={cn(
-              'flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
-              searchParams.get('onSale')
-                ? 'text-primary-600 border-primary-600'
-                : 'text-error-600 border-transparent hover:border-error-400'
-            )}
-          >
-            <span className="text-sm">🏷️</span>
-            {t('home.onSale')}
-          </Link>
+            <Link
+              href="/products?onSale=true"
+              className={cn(
+                'flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
+                searchParams.get('onSale')
+                  ? 'text-primary-600 border-primary-600'
+                  : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
+              )}
+            >
+              <span className="text-sm">🏷️</span>
+              {t('home.onSale')}
+            </Link>
 
-          <Link
-            href="/products?newArrivals=true"
-            className={cn(
-              'flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
-              searchParams.get('newArrivals')
-                ? 'text-primary-600 border-primary-600'
-                : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
-            )}
-          >
-            <span className="text-sm">✨</span>
-            {t('home.newArrivals')}
-          </Link>
+            <Link
+              href="/products?newArrivals=true"
+              className={cn(
+                'flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold font-display whitespace-nowrap transition-colors border-b-2',
+                searchParams.get('newArrivals')
+                  ? 'text-primary-600 border-primary-600'
+                  : 'text-dark-600 border-transparent hover:text-dark-900 hover:border-dark-300'
+              )}
+            >
+              <span className="text-sm">✨</span>
+              {t('home.newArrivals')}
+            </Link>
+          </div>
         </div>
       </div>
     </div>

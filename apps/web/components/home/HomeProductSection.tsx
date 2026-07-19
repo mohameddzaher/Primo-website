@@ -1,13 +1,16 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
 import { HiArrowRight } from 'react-icons/hi';
 import { productsApi } from '@/lib/api';
-import { ProductCard } from '@/components/product/ProductCard';
+import { ProductRail } from './ProductRail';
 import { ProductGridSkeleton } from '@/components/ui';
+import { getImageUrl } from '@/lib/utils';
 import { useCmsContent } from '@/lib/use-cms-content';
 import { useT } from '@/lib/i18n';
+import type { TranslationKey } from '@/lib/i18n';
 
 function parseCmsJson(data: any, fallback: any) {
   try {
@@ -19,10 +22,21 @@ function parseCmsJson(data: any, fallback: any) {
 }
 
 interface HomeProductSectionProps {
-  /** Section title shown in heading */
-  title: string;
-  /** Small eyebrow label above heading */
-  subtitle?: string;
+  /** Translation key for the section heading (e.g. 'home.featuredProducts'). */
+  titleKey: TranslationKey;
+  /** Translation key for the small eyebrow label above the heading. */
+  subtitleKey?: TranslationKey;
+  /**
+   * Layout treatment:
+   *  - 'grid'  — heading above a full-width product grid (the quiet default).
+   *  - 'panel' — an accent panel carrying the heading and CTA, sitting beside
+   *              the products. Related in structure to the category spotlight
+   *              but colour/typography-led rather than photo-led, so the page
+   *              reads as one system without repeating the same block.
+   */
+  layout?: 'grid' | 'panel';
+  /** Which side the accent panel sits on. Alternate it between panel sections. */
+  panelSide?: 'start' | 'end';
   /** Link for "View All" button */
   viewAllHref: string;
   /** Query params forwarded to productsApi.getAll */
@@ -44,8 +58,10 @@ interface HomeProductSectionProps {
 }
 
 export function HomeProductSection({
-  title,
-  subtitle,
+  titleKey,
+  subtitleKey,
+  layout = 'grid',
+  panelSide = 'start',
   viewAllHref,
   queryParams,
   queryKey,
@@ -57,6 +73,8 @@ export function HomeProductSection({
   tabId,
 }: HomeProductSectionProps) {
   const t = useT();
+  const title = t(titleKey);
+  const subtitle = subtitleKey ? t(subtitleKey) : undefined;
 
   // Read the tabbed products config to check if this section is enabled
   const { data: tabsCms } = useCmsContent('homepage_tabbed_products');
@@ -99,6 +117,72 @@ export function HomeProductSection({
     ? 'text-white/80 hover:text-white border-white/20 hover:border-white/40'
     : 'text-primary-600 hover:text-primary-700';
 
+  // ── Panel layout: image-led panel beside a rail of products ───────────────
+  if (layout === 'panel') {
+    const reversed = panelSide === 'end';
+    // The panel artwork is the rail's own best product — always on-topic, and
+    // it changes by itself as the catalogue does. No hardcoded stock photo.
+    const panelImage = getImageUrl(products[0]?.images?.[0]);
+
+    return (
+      <section className={`${bg} border-b border-beige-100`}>
+        <div className="container-custom py-12 sm:py-16">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6 items-stretch">
+            {/* `order` (not left/right) so it mirrors correctly under dir="rtl"
+                and keeps alternating by reading direction. */}
+            <div className={`lg:col-span-1 ${reversed ? 'lg:order-2' : 'lg:order-1'}`}>
+              <div className="relative h-full min-h-[240px] rounded-2xl overflow-hidden bg-dark-900">
+                {panelImage && (
+                  <Image
+                    src={panelImage}
+                    alt=""
+                    aria-hidden
+                    fill
+                    className="object-cover opacity-60"
+                    sizes="(max-width: 1024px) 100vw, 33vw"
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-dark-950/90 via-dark-950/55 to-dark-950/25" />
+
+                <div className="relative h-full flex flex-col justify-end p-6 sm:p-7 text-start">
+                  {subtitle && (
+                    <span className="text-xs font-semibold uppercase tracking-wider text-primary-400">
+                      {subtitle}
+                    </span>
+                  )}
+                  <h2 className="mt-1 text-2xl sm:text-3xl font-display font-bold text-white leading-tight">
+                    {title}
+                  </h2>
+                  <Link
+                    href={viewAllHref}
+                    className="mt-5 inline-flex w-fit items-center gap-1.5 rounded-lg bg-white/95 px-4 py-2 text-sm font-semibold text-dark-900 hover:bg-white transition-colors"
+                  >
+                    {t('common.viewAll')}
+                    <HiArrowRight size={14} className="rtl-flip" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Products — same rail, so cards match every other section */}
+            <div
+              className={`lg:col-span-3 min-w-0 flex items-center ${
+                reversed ? 'lg:order-1' : 'lg:order-2'
+              }`}
+            >
+              {isLoading ? (
+                <ProductGridSkeleton count={4} />
+              ) : (
+                <ProductRail products={products.slice(0, limit)} fitCount={4} className="w-full" />
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ── Default layout: heading above a single scrollable rail ────────────────
   return (
     <section className={`${bg} border-b border-beige-100`}>
       <div className="container-custom py-12 sm:py-16">
@@ -113,6 +197,11 @@ export function HomeProductSection({
             <h2 className={`mt-1 text-xl sm:text-2xl font-display font-bold ${headingClass}`}>
               {title}
             </h2>
+            {/* Short accent rule — ties every section header to the same system */}
+            <span
+              aria-hidden
+              className={`mt-2.5 block h-0.5 w-10 rounded-full ${dark ? 'bg-primary-400' : 'bg-primary-600'}`}
+            />
           </div>
           <Link
             href={viewAllHref}
@@ -122,20 +211,11 @@ export function HomeProductSection({
           </Link>
         </div>
 
-        {/* Grid — centered */}
+        {/* One scrollable row — never wraps to a second line */}
         {isLoading ? (
           <ProductGridSkeleton count={limit} />
         ) : (
-          <div className="flex flex-wrap justify-center gap-2 md:gap-3">
-            {products.slice(0, limit).map((product: any) => (
-              <div
-                key={product._id}
-                className="w-[calc(50%-4px)] sm:w-[calc(33.333%-6px)] md:w-[calc(25%-7px)] lg:w-[calc(20%-8px)]"
-              >
-                <ProductCard product={product} variant="compact" />
-              </div>
-            ))}
-          </div>
+          <ProductRail products={products.slice(0, limit)} />
         )}
       </div>
     </section>

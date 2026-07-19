@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { HiArrowRight, HiChevronLeft, HiChevronRight } from 'react-icons/hi';
 import { productsApi } from '@/lib/api';
 import { ProductCard } from '@/components/product/ProductCard';
+import { RAIL_CARD_WIDTH } from './ProductRail';
 import { useRecentlyViewedStore } from '@/lib/store';
 import { useSettings } from '@/lib/settings-context';
 import { useI18n } from '@/lib/i18n';
@@ -103,13 +104,13 @@ export function RecentlyViewed() {
             ? Array.from({ length: Math.min(ids.length, 6) }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex-shrink-0 w-[140px] sm:w-[160px] md:w-[180px] h-[260px] bg-beige-100 rounded-xl animate-pulse"
+                  className="flex-shrink-0  h-[260px] bg-beige-100 rounded-xl animate-pulse"
                 />
               ))
             : products.map((product: any) => (
                 <div
                   key={product._id}
-                  className="flex-shrink-0 w-[140px] sm:w-[160px] md:w-[180px]"
+                  className={`flex-shrink-0 ${RAIL_CARD_WIDTH}`}
                 >
                   <ProductCard product={product} variant="compact" />
                 </div>

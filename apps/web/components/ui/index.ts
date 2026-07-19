@@ -50,3 +50,4 @@ export type { SpinnerProps, SkeletonProps } from './Loading';
 // Rating
 export { Rating, RatingSummary, StarInput } from './Rating';
 export type { RatingProps, RatingSummaryProps, StarInputProps } from './Rating';
+export { ContentIcon, CONTENT_ICONS, resolveContentIcon } from './ContentIcon';

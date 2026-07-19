@@ -55,10 +55,10 @@ function useTabProducts(tab: TabId, limit: number, enabled: boolean) {
 }
 
 const TAB_LINKS: Record<TabId, string> = {
-  featured: '/products?sort=newest&featured=true',
+  featured: '/products?sort=-createdAt&featured=true',
   on_sale: '/products?onSale=true',
-  top_rated: '/products?sort=rating',
-  new_arrivals: '/products?sort=newest',
+  top_rated: '/products?sort=-averageRating',
+  new_arrivals: '/products?sort=-createdAt',
 };
 
 export function HomeTabbedProducts() {

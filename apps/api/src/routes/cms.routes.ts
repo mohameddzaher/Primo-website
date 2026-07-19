@@ -4,17 +4,23 @@
 
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
+import { z } from 'zod';
 import {
   updateCMSContentSchema,
   updatePolicyPageSchema,
   createFAQSchema,
   updateFAQSchema,
   subscribeNewsletterSchema,
-  createContactMessageSchema,
 } from '@primo/shared';
 import { CMSContent, PolicyPage, FAQ } from '../models/CMS';
 import { Newsletter } from '../models/Newsletter';
-import { ContactMessage } from '../models/Contact';
+import {
+  ContactMessage,
+  CONTACT_TYPES,
+  COMPLAINT_CATEGORIES,
+  CONTACT_PRIORITIES,
+} from '../models/Contact';
+import { AuditLog } from '../models/AuditLog';
 import { authenticate, requireAdmin, requireSuperAdmin, requirePermission, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { cacheResponse, invalidateOnWrite } from '../middleware/cache';
@@ -1045,15 +1051,94 @@ router.get(
 
 // ========== CONTACT ==========
 
-// Submit contact form (public)
+// Human-readable subject line used when a complaint is filed without one — the
+// complaint form asks for a category instead of a subject.
+const complaintSubjects: Record<string, string> = {
+  delivery: 'Complaint — Delivery',
+  product_quality: 'Complaint — Product quality',
+  damaged: 'Complaint — Damaged item',
+  billing: 'Complaint — Billing & payment',
+  warranty: 'Complaint — Warranty',
+  staff: 'Complaint — Staff & service',
+  other: 'Complaint — Other',
+};
+
+const submitContactSchema = z
+  .object({
+    type: z.enum(CONTACT_TYPES).default('general'),
+    name: z.string().min(2).max(100),
+    email: z.string().email(),
+    phone: z.string().max(30).optional(),
+    subject: z.string().min(3).max(200).optional(),
+    message: z.string().min(10).max(5000),
+    // Complaint-only. Order numbers are stored uppercase so admin search on the
+    // number matches regardless of how the customer typed it.
+    orderNumber: z
+      .string()
+      .max(50)
+      .optional()
+      .transform((value) => {
+        const trimmed = value?.trim().toUpperCase();
+        return trimmed ? trimmed : undefined;
+      }),
+    category: z.enum(COMPLAINT_CATEGORIES).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type === 'complaint') {
+      if (!data.category) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['category'],
+          message: 'Complaint category is required',
+        });
+      }
+    } else if (!data.subject) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['subject'],
+        message: 'Subject is required',
+      });
+    }
+  });
+
+const updateContactSchema = z
+  .object({
+    status: z.enum(['new', 'in_progress', 'resolved', 'closed']).optional(),
+    priority: z.enum(CONTACT_PRIORITIES).optional(),
+    adminNote: z.string().max(2000).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'Nothing to update',
+  });
+
+// Submit contact form / complaint (public). Rate limiting is applied globally.
 router.post(
   '/contact',
-  validate(createContactMessageSchema),
+  validate(submitContactSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { name, email, phone, subject, message } = req.body;
+    const { type, name, email, phone, message, orderNumber, category } = req.body;
 
-    // Save to database
-    await ContactMessage.create({ name, email, phone, subject, message });
+    const subject: string =
+      req.body.subject ||
+      complaintSubjects[category as string] ||
+      'Complaint';
+
+    // Complaints about a damaged item or a wrong charge need a faster response
+    // than a general question, so they open one notch above the default.
+    const priority = type === 'complaint' && (category === 'damaged' || category === 'billing')
+      ? 'high'
+      : 'medium';
+
+    await ContactMessage.create({
+      type,
+      name,
+      email,
+      phone,
+      subject,
+      message,
+      priority,
+      ...(type === 'complaint' ? { orderNumber, category } : {}),
+    });
 
     // Forward to company email
     forwardContactMessage(name, email, phone, subject, message).catch(console.error);
@@ -1065,23 +1150,36 @@ router.post(
   })
 );
 
-// Get contact messages (admin)
+// List contact messages / complaints (admin)
 router.get(
-  '/contact/messages',
+  '/contact',
   authenticate,
   requireAdmin,
+  requirePermission('cms', 'read'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { page = 1, limit = 20, status } = req.query as any;
-    const skip = (Number(page) - 1) * Number(limit);
+    const { page = 1, limit = 20, type, status, search } = req.query as Record<string, string>;
 
-    const query: any = {};
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+    const skip = (pageNum - 1) * limitNum;
+
+    const query: Record<string, any> = {};
+    if (type && CONTACT_TYPES.includes(type as any)) query.type = type;
     if (status) query.status = status;
+    if (search) {
+      // Escaped so a customer-supplied string can never act as a regex.
+      const safe = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (safe) {
+        const rx = new RegExp(safe, 'i');
+        query.$or = [{ name: rx }, { email: rx }, { orderNumber: rx }];
+      }
+    }
 
     const [messages, total] = await Promise.all([
       ContactMessage.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit))
+        .limit(limitNum)
         .lean(),
       ContactMessage.countDocuments(query),
     ]);
@@ -1090,37 +1188,70 @@ router.get(
       success: true,
       data: messages,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        totalPages: Math.ceil(total / Number(limit)),
+        totalPages: Math.ceil(total / limitNum),
       },
     });
   })
 );
 
-// Update contact message status (admin)
+// Update a contact message (admin)
 router.patch(
-  '/contact/messages/:id',
+  '/contact/:id',
   authenticate,
   requireAdmin,
+  requirePermission('cms', 'write'),
+  validate(updateContactSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const { status, notes, assignedTo } = req.body;
+    const { status, priority, adminNote } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new BadRequestError('Invalid message ID');
     }
 
-    const message = await ContactMessage.findByIdAndUpdate(
-      id,
-      { status, notes, assignedTo },
-      { new: true }
-    );
-
+    const message = await ContactMessage.findById(id);
     if (!message) {
       throw new NotFoundError('Message');
     }
+
+    const oldValue = {
+      status: message.status,
+      priority: message.priority,
+      adminNote: message.adminNote,
+    };
+
+    if (status !== undefined) message.status = status;
+    if (priority !== undefined) message.priority = priority;
+    if (adminNote !== undefined) message.adminNote = adminNote;
+
+    // Stamp the resolution time the first time it lands in a terminal state,
+    // and clear it if the ticket is reopened.
+    if (status === 'resolved' || status === 'closed') {
+      if (!message.resolvedAt) message.resolvedAt = new Date();
+    } else if (status !== undefined) {
+      message.resolvedAt = undefined;
+    }
+
+    await message.save();
+
+    await AuditLog.create({
+      userId: req.userId,
+      action: status !== undefined ? 'status_change' : 'update',
+      resource: 'contact_message',
+      resourceId: message._id.toString(),
+      oldValue,
+      newValue: {
+        status: message.status,
+        priority: message.priority,
+        adminNote: message.adminNote,
+        type: message.type,
+      },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
 
     res.json({
       success: true,

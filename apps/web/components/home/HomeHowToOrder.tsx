@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ContentIcon } from '@/components/ui';
 import { useCmsContent } from '@/lib/use-cms-content';
 import { useT } from '@/lib/i18n';
 
@@ -28,10 +29,10 @@ const defaultSettings = {
   ctaText: 'Start Shopping',
   ctaLink: '/products',
   steps: [
-    { icon: '🔍', title: 'Browse Products', description: 'Explore our wide range of premium home appliances and electronics.', order: 1, enabled: true },
-    { icon: '🛒', title: 'Add to Cart', description: 'Select your items and add them to your cart with a single click.', order: 2, enabled: true },
-    { icon: '📦', title: 'Place Your Order', description: 'Review your cart, choose a payment method, and confirm your order.', order: 3, enabled: true },
-    { icon: '🚀', title: 'Fast Delivery', description: 'Sit back and relax — your order will arrive right at your door.', order: 4, enabled: true },
+    { icon: 'search', title: 'Browse Products', description: 'Explore our wide range of premium home appliances and electronics.', order: 1, enabled: true },
+    { icon: 'cart', title: 'Add to Cart', description: 'Select your items and add them to your cart with a single click.', order: 2, enabled: true },
+    { icon: 'clipboard', title: 'Place Your Order', description: 'Review your cart, choose a payment method, and confirm your order.', order: 3, enabled: true },
+    { icon: 'truck', title: 'Fast Delivery', description: 'Sit back and relax — your order will arrive right at your door.', order: 4, enabled: true },
   ] as OrderStep[],
 };
 
@@ -85,8 +86,8 @@ export function HomeHowToOrder() {
               <div key={i} className="flex flex-col items-center text-center group">
                 {/* Icon bubble */}
                 <div className="relative mb-5">
-                  <div className="w-[72px] h-[72px] rounded-2xl bg-beige-50 border-2 border-beige-200 shadow-sm flex items-center justify-center text-3xl group-hover:border-primary-300 group-hover:shadow-md transition-all duration-200">
-                    {step.icon}
+                  <div className="w-[72px] h-[72px] rounded-2xl bg-beige-50 border-2 border-beige-200 shadow-sm flex items-center justify-center text-primary-600 group-hover:border-primary-300 group-hover:shadow-md transition-all duration-200">
+                    <ContentIcon name={step.icon} size={30} />
                   </div>
                   {/* Step number badge */}
                   <span className="absolute -top-2 -end-2 w-6 h-6 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center shadow">

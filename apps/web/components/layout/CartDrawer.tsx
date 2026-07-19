@@ -4,13 +4,14 @@ import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Dialog, Transition } from '@headlessui/react';
-import { HiOutlineX, HiOutlineTrash, HiPlus, HiMinus } from 'react-icons/hi';
+import { HiOutlineShoppingBag, HiOutlineTruck, HiOutlineLockClosed, HiOutlineX, HiOutlineTrash, HiPlus, HiMinus } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCartStore } from '@/lib/store';
 import { cartApi } from '@/lib/api';
 import { formatCurrency, getDiscountedPrice } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
 import { Button } from '@/components/ui';
+import { PaymentMethods } from '@/components/PaymentMethods';
 import { useT } from '@/lib/i18n';
 import toast from 'react-hot-toast';
 
@@ -32,6 +33,20 @@ export function CartDrawer() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const subtotal = getSubtotal();
+  const itemCount = items.reduce((n, i) => n + (i.quantity || 0), 0);
+
+  // Free-delivery meter. Threshold is admin-configurable, so never hardcode it.
+  const freeShippingThreshold = settings.freeShippingThreshold || 500;
+  const qualifiesForFreeShipping = subtotal >= freeShippingThreshold;
+  const remainingForFreeShipping = Math.max(0, freeShippingThreshold - subtotal);
+  const freeShippingProgress = Math.min(100, (subtotal / freeShippingThreshold) * 100);
+
+  // What the customer saves versus the pre-discount price of each line.
+  const savings = items.reduce((sum, item) => {
+    const base = item.product?.price || 0;
+    const pct = item.product?.discount || 0;
+    return pct > 0 ? sum + base * (pct / 100) * (item.quantity || 0) : sum;
+  }, 0);
   const total = getTotal();
 
   const handleUpdateQuantity = async (productId: string, newQuantity: number, variantId?: string) => {
@@ -99,22 +114,54 @@ export function CartDrawer() {
                 leaveTo="translate-x-full rtl:-translate-x-full"
               >
                 <Dialog.Panel className="pointer-events-auto w-screen max-w-md">
-                  <div className="flex h-full flex-col bg-white shadow-soft-xl">
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-beige-200">
-                      <Dialog.Title className="text-lg font-semibold text-dark-900">
-                        {t('cart.title')}
-                        <span className="ms-2 text-sm font-normal text-dark-500">
-                          {t('shop.cart.itemsCount', { count: items.length })}
-                        </span>
-                      </Dialog.Title>
-                      <button
-                        onClick={closeCart}
-                        aria-label={t('common.close')}
-                        className="p-2 text-dark-400 hover:text-dark-600 hover:bg-beige-100 rounded-lg transition-colors"
-                      >
-                        <HiOutlineX size={20} />
-                      </button>
+                  <div className="flex h-full flex-col bg-beige-50 shadow-soft-xl">
+                    {/* Header — dark band so the drawer reads as its own surface
+                        rather than a white sheet floating on a white page. */}
+                    <div className="relative bg-dark-900 px-6 pt-5 pb-4">
+                      <div className="flex items-center justify-between">
+                        <Dialog.Title className="flex items-center gap-2.5 text-lg font-display font-bold text-white">
+                          <HiOutlineShoppingBag size={20} className="text-primary-400" />
+                          {t('cart.title')}
+                          <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-primary-500 text-[11px] font-bold text-white ltr-nums">
+                            {itemCount}
+                          </span>
+                        </Dialog.Title>
+                        <button
+                          onClick={closeCart}
+                          aria-label={t('common.close')}
+                          className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                        >
+                          <HiOutlineX size={20} />
+                        </button>
+                      </div>
+
+                      {/* Free-delivery meter — turns "spend more" into a visible,
+                          achievable goal. Threshold comes from admin settings. */}
+                      {items.length > 0 && settings.enableFreeShipping && (
+                        <div className="mt-4">
+                          <div className="flex items-center gap-2 text-xs">
+                            <HiOutlineTruck
+                              size={15}
+                              className={qualifiesForFreeShipping ? 'text-success-400' : 'text-primary-400'}
+                            />
+                            <span className={qualifiesForFreeShipping ? 'text-success-400 font-medium' : 'text-white/80'}>
+                              {qualifiesForFreeShipping
+                                ? t('shop.cart.freeShippingUnlocked')
+                                : t('shop.cart.freeShippingProgress', {
+                                    amount: formatCurrency(remainingForFreeShipping),
+                                  })}
+                            </span>
+                          </div>
+                          <div className="mt-2 h-1.5 w-full rounded-full bg-white/15 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                qualifiesForFreeShipping ? 'bg-success-500' : 'bg-primary-500'
+                              }`}
+                              style={{ width: `${freeShippingProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Cart Items */}
@@ -300,11 +347,21 @@ export function CartDrawer() {
                               </span>
                             </div>
                           )}
+                          {savings > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-success-600 font-medium">
+                                {t('shop.cart.youSave')}
+                              </span>
+                              <span className="font-semibold text-success-600 ltr-nums">
+                                {formatCurrency(savings)}
+                              </span>
+                            </div>
+                          )}
                           <div className="flex items-center justify-between pt-2 border-t border-beige-200">
                             <span className="text-base font-semibold text-dark-900">
                               {t('cart.total')}
                             </span>
-                            <span className="text-lg font-bold text-dark-900 ltr-nums">
+                            <span className="text-xl font-bold text-dark-900 ltr-nums">
                               {formatCurrency(total)}
                             </span>
                           </div>
@@ -312,17 +369,29 @@ export function CartDrawer() {
 
                         {/* Actions */}
                         <div className="space-y-2">
-                          <Link href="/checkout" onClick={closeCart}>
+                          <Link href="/checkout" onClick={closeCart} className="block">
                             <Button variant="primary" fullWidth size="lg">
                               {t('checkout.title')}
                             </Button>
                           </Link>
-                          <Link href="/cart" onClick={closeCart}>
+                          <Link href="/cart" onClick={closeCart} className="block">
                             <Button variant="secondary" fullWidth>
                               {t('shop.cart.viewCart')}
                             </Button>
                           </Link>
                         </div>
+
+                        {/* Reassurance right where the decision happens */}
+                        <div className="flex items-center justify-center gap-1.5 text-xs text-dark-500">
+                          <HiOutlineLockClosed size={13} />
+                          {t('shop.cart.secureCheckout')}
+                        </div>
+                        <PaymentMethods
+                          includeCOD={settings.enableCOD}
+                          label={null}
+                          size="sm"
+                          className="justify-center"
+                        />
 
                         <p className="text-xs text-center text-dark-500">
                           {settings.enableTax && settings.taxRate > 0

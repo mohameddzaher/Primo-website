@@ -107,16 +107,28 @@ export function Brands() {
   const duplicated = [...brands, ...brands];
 
   return (
-    <section className="py-10 bg-beige-50 border-y border-beige-200 overflow-hidden">
+    <section className="py-12 sm:py-16 bg-beige-50 border-y border-beige-200 overflow-hidden">
       <div className="container-custom">
-        <motion.p
+        {/* Same eyebrow + heading + accent-rule treatment as every other
+            homepage section — this was a plain caption, which made an important
+            trust statement read like a footnote. */}
+        <motion.div
           initial={{ opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center text-sm font-medium text-dark-600 mb-6 uppercase tracking-wider"
+          className="text-center mb-8"
         >
-          {t('home.brandsHeading')}
-        </motion.p>
+          <span className="text-xs font-semibold uppercase tracking-wider text-primary-600">
+            {t('nav.brands')}
+          </span>
+          <h2 className="mt-1 text-xl sm:text-2xl font-display font-bold text-dark-900">
+            {t('home.brandsHeading')}
+          </h2>
+          <span
+            aria-hidden
+            className="mt-2.5 mx-auto block h-0.5 w-10 rounded-full bg-primary-600"
+          />
+        </motion.div>
       </div>
 
       {/* Edge fades are symmetric, so the physical left/right offsets read the

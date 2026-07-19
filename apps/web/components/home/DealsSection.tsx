@@ -8,6 +8,7 @@ import { HiArrowRight, HiClock } from 'react-icons/hi';
 import { offersApi, productsApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-client';
 import { ProductCard } from '@/components/product/ProductCard';
+import { RAIL_CARD_WIDTH } from './ProductRail';
 import { Button, ProductGridSkeleton } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
@@ -162,7 +163,7 @@ export function DealsSection() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.05 }}
-                className="w-[calc(50%-4px)] sm:w-[calc(33.333%-6px)] md:w-[calc(25%-7px)] lg:w-[calc(20%-8px)] xl:w-[calc(16.666%-8px)]"
+                className={`flex-shrink-0 ${RAIL_CARD_WIDTH}`}
               >
                 <ProductCard product={product} variant="compact" />
               </motion.div>

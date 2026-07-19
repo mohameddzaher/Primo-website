@@ -49,20 +49,25 @@ export function cacheResponse(tag: string, ttlSeconds = 60) {
     const hit = store.get(key);
     const now = Date.now();
 
+    // Cache-Control policy: the expensive part is the MongoDB round trip, and
+    // the in-process cache above already removes it (~200ms -> ~2ms). Letting
+    // the BROWSER hold the response too buys almost nothing and actively hurts:
+    // this data is admin-editable, and a private browser cache cannot be purged
+    // by invalidateOnWrite(), so an edit would keep showing the old content to
+    // that visitor until their copy expired.
+    //
+    // So: browsers must revalidate every time (cheap — we answer from memory),
+    // while shared caches / CDNs may still serve it for the TTL via s-maxage.
+    const cacheControl = `public, max-age=0, must-revalidate, s-maxage=${ttlSeconds}`;
+
     if (hit && hit.expiresAt > now) {
       res.setHeader('X-Cache', 'HIT');
-      res.setHeader(
-        'Cache-Control',
-        `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 5}`
-      );
+      res.setHeader('Cache-Control', cacheControl);
       return res.json(hit.body);
     }
 
     res.setHeader('X-Cache', 'MISS');
-    res.setHeader(
-      'Cache-Control',
-      `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 5}`
-    );
+    res.setHeader('Cache-Control', cacheControl);
 
     // Intercept res.json to store the payload once the handler produces it
     const originalJson = res.json.bind(res);

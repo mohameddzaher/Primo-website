@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HiOutlineX, HiOutlinePlus, HiOutlineSave } from 'react-icons/hi';
 import { Button, Input, Card } from '@/components/ui';
+import { IconSelect } from '@/components/admin/IconSelect';
 import { cmsApi, adminApi } from '@/lib/api';
 import { getApiErrorMessage } from '@/lib/api-error';
 import toast from 'react-hot-toast';
@@ -186,10 +187,10 @@ function useSaveContent(key: string) {
 
 function FeaturesEditor({ data }: { data: any }) {
   const featuresDefault = [
-    { icon: '🚚', title: 'Free Shipping', description: 'On orders over SAR 500' },
-    { icon: '🛡️', title: '2 Year Warranty', description: 'Full coverage guarantee' },
-    { icon: '↩️', title: 'Easy Returns', description: '30-day return policy' },
-    { icon: '💬', title: '24/7 Support', description: 'Expert assistance anytime' },
+    { icon: 'truck', title: 'Free Shipping', description: 'On orders over SAR 500' },
+    { icon: 'shield', title: '2 Year Warranty', description: 'Full coverage guarantee' },
+    { icon: 'refresh', title: 'Easy Returns', description: '30-day return policy' },
+    { icon: 'chat', title: '24/7 Support', description: 'Expert assistance anytime' },
   ];
   const [items, setItems] = useState<Array<{ icon: string; title: string; description: string }>>(
     () => parseCmsValue(data, featuresDefault)
@@ -209,7 +210,7 @@ function FeaturesEditor({ data }: { data: any }) {
           size="sm"
           variant="outline"
           leftIcon={<HiOutlinePlus size={16} />}
-          onClick={() => setItems([...items, { icon: '⭐', title: '', description: '' }])}
+          onClick={() => setItems([...items, { icon: 'star', title: '', description: '' }])}
         >
           Add Feature
         </Button>
@@ -217,11 +218,9 @@ function FeaturesEditor({ data }: { data: any }) {
 
       {items.map((item, i) => (
         <div key={i} className="flex gap-3 items-start p-4 bg-beige-50 rounded-lg">
-          <input
-            className="w-16 px-2 py-2 border border-beige-300 rounded-lg text-center text-xl"
+          <IconSelect
             value={item.icon}
-            onChange={(e) => { const n = [...items]; n[i].icon = e.target.value; setItems(n); }}
-            placeholder="Icon"
+            onChange={(v: string) => { const n = [...items]; n[i].icon = v; setItems(n); }}
           />
           <div className="flex-1 space-y-2">
             <input
@@ -304,14 +303,14 @@ function WhyChooseUsEditor({ data }: { data: any }) {
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-dark-900">Reasons</h3>
           <Button size="sm" variant="outline" leftIcon={<HiOutlinePlus size={16} />}
-            onClick={() => setContent({ ...content, reasons: [...content.reasons, { icon: '⭐', title: '', description: '' }] })}>
+            onClick={() => setContent({ ...content, reasons: [...content.reasons, { icon: 'star', title: '', description: '' }] })}>
             Add Reason
           </Button>
         </div>
 
         {content.reasons.map((reason, i) => (
           <div key={i} className="flex gap-3 items-start p-4 bg-beige-50 rounded-lg">
-            <input className="w-16 px-2 py-2 border border-beige-300 rounded-lg text-center text-xl" value={reason.icon} onChange={(e) => updateReason(i, 'icon', e.target.value)} />
+            <IconSelect value={reason.icon} onChange={(v: string) => updateReason(i, 'icon', v)} />
             <div className="flex-1 space-y-2">
               <input className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm" value={reason.title} onChange={(e) => updateReason(i, 'title', e.target.value)} placeholder="Title" />
               <textarea className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm" rows={2} value={reason.description} onChange={(e) => updateReason(i, 'description', e.target.value)} placeholder="Description" />
@@ -390,13 +389,13 @@ function NewsletterEditor({ data }: { data: any }) {
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-dark-900">Benefits</h3>
           <Button size="sm" variant="outline" leftIcon={<HiOutlinePlus size={16} />}
-            onClick={() => setContent({ ...content, benefits: [...content.benefits, { icon: '⭐', title: '', description: '' }] })}>
+            onClick={() => setContent({ ...content, benefits: [...content.benefits, { icon: 'star', title: '', description: '' }] })}>
             Add Benefit
           </Button>
         </div>
         {content.benefits.map((b, i) => (
           <div key={i} className="flex gap-3 items-start p-4 bg-beige-50 rounded-lg">
-            <input className="w-16 px-2 py-2 border border-beige-300 rounded-lg text-center text-xl" value={b.icon} onChange={(e) => { const n = [...content.benefits]; n[i].icon = e.target.value; setContent({ ...content, benefits: n }); }} />
+            <IconSelect value={b.icon} onChange={(v: string) => { const n = [...content.benefits]; n[i].icon = v; setContent({ ...content, benefits: n }); }} />
             <div className="flex-1 space-y-2">
               <input className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm" value={b.title} onChange={(e) => { const n = [...content.benefits]; n[i].title = e.target.value; setContent({ ...content, benefits: n }); }} placeholder="Title" />
               <input className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm" value={b.description} onChange={(e) => { const n = [...content.benefits]; n[i].description = e.target.value; setContent({ ...content, benefits: n }); }} placeholder="Description" />
@@ -419,10 +418,10 @@ function NewsletterEditor({ data }: { data: any }) {
 
 function HeroBadgesEditor({ data }: { data: any }) {
   const badgesDefault = [
-    { icon: '🚚', title: 'Free Shipping', subtitle: 'On orders over SAR 500' },
-    { icon: '🛡️', title: '2-Year Warranty', subtitle: 'On all products' },
+    { icon: 'truck', title: 'Free Shipping', subtitle: 'On orders over SAR 500' },
+    { icon: 'shield', title: '2-Year Warranty', subtitle: 'On all products' },
     { icon: '🔒', title: 'Secure Payment', subtitle: 'Multiple options' },
-    { icon: '💬', title: '24/7 Support', subtitle: 'Expert assistance' },
+    { icon: 'chat', title: '24/7 Support', subtitle: 'Expert assistance' },
   ];
   const [items, setItems] = useState<Array<{ icon: string; title: string; subtitle: string }>>(
     () => parseCmsValue(data, badgesDefault)
@@ -446,7 +445,7 @@ function HeroBadgesEditor({ data }: { data: any }) {
 
       {items.map((item, i) => (
         <div key={i} className="flex gap-3 items-start p-4 bg-beige-50 rounded-lg">
-          <input className="w-16 px-2 py-2 border border-beige-300 rounded-lg text-center text-xl" value={item.icon} onChange={(e) => { const n = [...items]; n[i].icon = e.target.value; setItems(n); }} />
+          <IconSelect value={item.icon} onChange={(v: string) => { const n = [...items]; n[i].icon = v; setItems(n); }} />
           <div className="flex-1 space-y-2">
             <input className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm" value={item.title} onChange={(e) => { const n = [...items]; n[i].title = e.target.value; setItems(n); }} placeholder="Title" />
             <input className="w-full px-3 py-2 border border-beige-300 rounded-lg text-sm" value={item.subtitle} onChange={(e) => { const n = [...items]; n[i].subtitle = e.target.value; setItems(n); }} placeholder="Subtitle" />
@@ -975,12 +974,7 @@ function HowToOrderEditor({ data }: { data: any }) {
 
         {settings.steps.map((step, i) => (
           <div key={i} className="flex gap-3 items-start p-4 bg-beige-50 rounded-lg">
-            <input
-              className="w-14 px-2 py-2 border border-beige-300 rounded-lg text-center text-xl"
-              value={step.icon}
-              onChange={(e) => updateStep(i, 'icon', e.target.value)}
-              title="Icon (emoji)"
-            />
+            <IconSelect value={step.icon} onChange={(v: string) => updateStep(i, 'icon', v)} />
             <div className="flex-1 space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 <input

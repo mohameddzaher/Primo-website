@@ -34,12 +34,12 @@ export default function HomePage() {
       {/* 4. Featured Products — hand-picked by admin */}
       <HomeProductSection
         queryKey="products-featured-section"
-        title="Featured Products"
-        subtitle="Hand-picked for you"
+        titleKey="home.featuredProducts"
+        subtitleKey="home.featuredSubtitle"
         viewAllHref="/products?featured=true"
         queryParams={{ featured: true }}
         tabId="featured"
-        bg="bg-beige-50"
+        bg="bg-white"
         limit={8}
       />
 
@@ -47,15 +47,13 @@ export default function HomePage() {
           on the page. Hides itself until something has genuinely sold. */}
       <HomeBestSellers />
 
-      {/* 4c. Shop by Price — budget-first entry points into the filtered
-          listing, for visitors who know their spend but not their category. */}
-      <HomeShopByPrice />
-
       {/* 5. On Sale — high conversion, show discounted items */}
       <HomeProductSection
         queryKey="products-on-sale-section"
-        title="On Sale"
-        subtitle="Limited-time offers"
+        titleKey="home.onSale"
+        subtitleKey="home.onSaleSubtitle"
+        layout="panel"
+        panelSide="end"
         viewAllHref="/products?onSale=true"
         queryParams={{ onSale: true, sort: 'discount' }}
         tabId="on_sale"
@@ -75,9 +73,9 @@ export default function HomePage() {
       {/* 8. Top Rated — social proof, auto-hides if no ratings */}
       <HomeProductSection
         queryKey="products-top-rated-section"
-        title="Top Rated"
-        subtitle="Customer favourites"
-        viewAllHref="/products?sort=rating"
+        titleKey="home.topRated"
+        subtitleKey="home.topRatedSubtitle"
+        viewAllHref="/products?sort=-averageRating"
         queryParams={{ sort: 'rating' }}
         tabId="top_rated"
         bg="bg-beige-50"
@@ -85,18 +83,27 @@ export default function HomePage() {
         requireRatings
       />
 
-      {/* 9. Wide promo banner — full-width campaign image */}
-      <HomeWideBanner />
+{/* 11. Authorized Brands carousel — trust + click to filter */}
+      <Brands />
 
-      {/* 10. Browse by Category — icon grid */}
-      <Categories />
-
-      {/* 10b. Category Spotlight — takes the largest category from the grid
+{/* 10b. Category Spotlight — takes the largest category from the grid
           above and shows what's actually on its shelf. */}
       <HomeCategorySpotlight />
 
-      {/* 11. Authorized Brands carousel — trust + click to filter */}
-      <Brands />
+{/* 10a. Shop by Price — a browsing aid, not merchandising, so it sits
+          with the other "browse by X" entry points rather than interrupting
+          the product rails near the top of the page. */}
+      <HomeShopByPrice />
+
+      {/* 9. Wide promo banner — full-width campaign image */}
+      <HomeWideBanner />
+
+      
+      
+      
+      
+{/* 10. Browse by Category — icon grid */}
+      <Categories />
 
       {/* 12. How to Order — reduce purchase friction */}
       <HomeHowToOrder />

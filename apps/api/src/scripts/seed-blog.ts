@@ -16,6 +16,8 @@ import path from 'path';
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import { BlogCategory, BlogPost } from '../models/Blog';
+import { Category } from '../models/Category';
+import { Product } from '../models/Product';
 import { User } from '../models/User';
 
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/primo';
@@ -24,7 +26,8 @@ interface PostSeed {
   title: string;
   category: string;
   excerpt: string;
-  featuredImage: string;
+  /** Cover is taken from a real product in this subcategory. */
+  imageFromSubcategory: string;
   tags: string[];
   metaTitle: string;
   metaDescription: string;
@@ -43,7 +46,7 @@ const POSTS: PostSeed[] = [
     category: 'Buying Guides',
     excerpt:
       'Capacity, cooling technology, and energy rating matter more than brand. Here is how to pick a fridge that fits your kitchen and your family.',
-    featuredImage: 'https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=1200&q=80',
+    imageFromSubcategory: 'Refrigerators',
     tags: ['refrigerators', 'buying guide', 'kitchen'],
     metaTitle: 'How to Choose a Refrigerator — Size, Type & Energy Guide',
     metaDescription:
@@ -84,7 +87,7 @@ const POSTS: PostSeed[] = [
     category: 'Buying Guides',
     excerpt:
       'Front loaders wash better and use less water. Top loaders are cheaper and easier on your back. Here is the honest trade-off.',
-    featuredImage: 'https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?w=1200&q=80',
+    imageFromSubcategory: 'Washing Machines',
     tags: ['washing machines', 'laundry', 'buying guide'],
     metaTitle: 'Front Load vs Top Load Washing Machine — Full Comparison',
     metaDescription:
@@ -121,7 +124,7 @@ const POSTS: PostSeed[] = [
     category: 'Buying Guides',
     excerpt:
       'BTU sizing, inverter vs non-inverter, and the maintenance habits that keep an air conditioner efficient through a 45°C afternoon.',
-    featuredImage: 'https://images.unsplash.com/photo-1614633833026-0820552978b6?w=1200&q=80',
+    imageFromSubcategory: 'Air Conditioners',
     tags: ['air conditioners', 'cooling', 'buying guide'],
     metaTitle: 'Split AC Buying Guide — BTU Sizing & Inverter Technology',
     metaDescription:
@@ -157,7 +160,7 @@ const POSTS: PostSeed[] = [
     category: 'Buying Guides',
     excerpt:
       'They cook using the same principle. The difference is size, speed and how often you will actually use them.',
-    featuredImage: 'https://images.unsplash.com/photo-1585515320310-259814833e62?w=1200&q=80',
+    imageFromSubcategory: 'Air Fryers',
     tags: ['air fryers', 'kitchen appliances', 'cooking'],
     metaTitle: 'Air Fryer vs Convection Oven — Which Do You Actually Need?',
     metaDescription:
@@ -192,7 +195,7 @@ const POSTS: PostSeed[] = [
     category: 'Buying Guides',
     excerpt:
       'Pressure, grinder quality and milk frothing decide the cup — not the price tag. Here is what to look for.',
-    featuredImage: 'https://images.unsplash.com/photo-1459755486867-b55449bb39ff?w=1200&q=80',
+    imageFromSubcategory: 'Coffee Makers',
     tags: ['coffee machines', 'espresso', 'buying guide'],
     metaTitle: 'Home Espresso Machine Buying Guide — Pressure, Grinders & Frothing',
     metaDescription:
@@ -226,7 +229,7 @@ const POSTS: PostSeed[] = [
     category: 'Buying Guides',
     excerpt:
       'One maintains, the other deep-cleans. Understanding that difference stops you buying the wrong one.',
-    featuredImage: 'https://images.unsplash.com/photo-1558317374-067fb5f30001?w=1200&q=80',
+    imageFromSubcategory: 'Vacuum Cleaners',
     tags: ['vacuum cleaners', 'cleaning', 'buying guide'],
     metaTitle: 'Robot vs Cordless Vacuum — A Practical Comparison',
     metaDescription:
@@ -258,7 +261,7 @@ const POSTS: PostSeed[] = [
     category: 'Energy & Savings',
     excerpt:
       'Air conditioning and water heating dominate a Saudi household bill. A handful of changes make a measurable difference.',
-    featuredImage: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=1200&q=80',
+    imageFromSubcategory: 'Air Conditioners',
     tags: ['energy saving', 'efficiency', 'tips'],
     metaTitle: 'How to Reduce Your Home Electricity Bill in Saudi Arabia',
     metaDescription:
@@ -294,7 +297,7 @@ const POSTS: PostSeed[] = [
     category: 'Care & Maintenance',
     excerpt:
       'Most appliances do not fail — they are neglected. A few minutes of routine care prevents the majority of service calls.',
-    featuredImage: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=1200&q=80',
+    imageFromSubcategory: 'Washing Machines',
     tags: ['maintenance', 'care', 'tips'],
     metaTitle: 'Home Appliance Maintenance Guide — Extend Their Lifespan',
     metaDescription:
@@ -358,6 +361,24 @@ async function main() {
   await BlogCategory.deleteMany({});
   console.log(`   Removed ${delPosts.deletedCount} posts.\n`);
 
+  // Covers come from an actual product in the matching subcategory. Guessing
+  // stock-photo IDs is how an article about air conditioners ended up with a
+  // photo of a dog — the URL returned 200, but nobody verified the subject.
+  console.log('🖼️  Resolving cover images from the catalogue...');
+  const coverBySubcategory = new Map<string, string>();
+  const subcategories = await Category.find({ parentId: { $exists: true } })
+    .select('_id name')
+    .lean();
+  for (const sub of subcategories) {
+    const product = await Product.findOne({ subcategoryId: sub._id, isActive: true })
+      .select('images')
+      .lean();
+    const url = (product as any)?.images?.[0]?.url;
+    if (url) coverBySubcategory.set((sub as any).name, url);
+  }
+  const coverFor = (subcategory: string): string | undefined =>
+    coverBySubcategory.get(subcategory);
+
   console.log('📁 Creating blog categories...');
   const categoryId = new Map<string, mongoose.Types.ObjectId>();
   for (const cat of CATEGORIES) {
@@ -378,7 +399,7 @@ async function main() {
       title: p.title,
       excerpt: p.excerpt,
       content: p.content,
-      featuredImage: p.featuredImage,
+      featuredImage: coverFor(p.imageFromSubcategory),
       categoryId: categoryId.get(p.category),
       tags: p.tags,
       authorId: author._id,

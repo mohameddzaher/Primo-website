@@ -30,6 +30,7 @@ import {
 } from '@/components/ui';
 import { formatCurrency, getDiscountedPrice } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-context';
+import { resolveAddress } from '@/lib/geocode';
 import { PaymentMethods } from '@/components/PaymentMethods';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { useI18n } from '@/lib/i18n';
@@ -80,7 +81,7 @@ const paymentMethods = [
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user, isAuthenticated } = useAuthStore();
   const { items, getSubtotal, discountCode, clearCart, setDiscount, clearDiscount, getDiscountAmount } = useCartStore();
   const discountAmount = getDiscountAmount();
@@ -251,11 +252,20 @@ export default function CheckoutPage() {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          const mockAddress = `Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-          setValue('fullAddress', mockAddress);
-          setValue('city', 'Riyadh');
-          setValue('area', 'Al Olaya');
-          toast.success(t('shop.toast.locationDetected'));
+          const resolved = await resolveAddress(latitude, longitude, locale);
+
+          // Only ever fill what we actually resolved. Guessing a city (this used
+          // to hardcode Riyadh for everyone) silently ships orders to the wrong
+          // address, which is far worse than leaving the field for the customer.
+          if (resolved.fullAddress) setValue('fullAddress', resolved.fullAddress);
+          if (resolved.city) setValue('city', resolved.city);
+          if (resolved.area) setValue('area', resolved.area);
+
+          if (resolved.city) {
+            toast.success(t('shop.toast.locationDetected'));
+          } else {
+            toast(t('shop.toast.locationApprox'));
+          }
         } catch (error) {
           toast.error(getApiErrorMessage(error, t('shop.toast.addressFailed')));
         } finally {

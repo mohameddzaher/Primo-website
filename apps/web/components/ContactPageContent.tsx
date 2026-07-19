@@ -10,6 +10,9 @@ import {
   HiOutlinePhone,
   HiOutlineLocationMarker,
   HiOutlineClock,
+  HiOutlineChatAlt2,
+  HiOutlineExclamationCircle,
+  HiOutlineCheckCircle,
 } from 'react-icons/hi';
 import {
   FaFacebookF,
@@ -20,71 +23,128 @@ import {
   FaLinkedinIn,
 } from 'react-icons/fa';
 import { FaXTwitter } from 'react-icons/fa6';
-import { Button, Input, Textarea, Card } from '@/components/ui';
-import { contactApi } from '@/lib/api';
+import { Button, Input, Textarea, Select, Card } from '@/components/ui';
+import { contactApi, type ComplaintCategory } from '@/lib/api';
 import { useSettings } from '@/lib/settings-context';
+import { useT } from '@/lib/i18n';
 import toast from 'react-hot-toast';
 
-const contactSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Please enter a valid email'),
-  phone: z.string().optional(),
-  subject: z.string().min(3, 'Subject must be at least 3 characters'),
-  message: z.string().min(10, 'Message must be at least 10 characters'),
-});
+type Tab = 'general' | 'complaint';
 
-type ContactForm = z.infer<typeof contactSchema>;
+const COMPLAINT_CATEGORIES: ComplaintCategory[] = [
+  'delivery',
+  'product_quality',
+  'damaged',
+  'billing',
+  'warranty',
+  'staff',
+  'other',
+];
+
+// Both schemas are built inside the component so every validation message can
+// go through the translator and follow the active locale.
+function buildSchemas(t: ReturnType<typeof useT>) {
+  const general = z.object({
+    name: z.string().min(2, t('shop.contact.error.name')),
+    email: z.string().email(t('shop.contact.error.email')),
+    phone: z.string().optional(),
+    subject: z.string().min(3, t('shop.contact.error.subject')),
+    message: z.string().min(10, t('shop.contact.error.message')),
+  });
+
+  const complaint = z.object({
+    name: z.string().min(2, t('shop.contact.error.name')),
+    email: z.string().email(t('shop.contact.error.email')),
+    phone: z.string().min(6, t('shop.contact.error.phone')),
+    orderNumber: z.string().optional(),
+    category: z.enum(
+      COMPLAINT_CATEGORIES as [ComplaintCategory, ...ComplaintCategory[]],
+      { errorMap: () => ({ message: t('shop.contact.error.category') }) }
+    ),
+    message: z.string().min(10, t('shop.contact.error.message')),
+  });
+
+  return { general, complaint };
+}
 
 export default function ContactPageContent() {
   const { settings } = useSettings();
+  const t = useT();
+  const [tab, setTab] = useState<Tab>('general');
+  // Which form was submitted, so the success panel can use the right copy.
+  const [submitted, setSubmitted] = useState<{ tab: Tab; email: string } | null>(null);
+
+  const schemas = buildSchemas(t);
+  type GeneralForm = z.infer<typeof schemas.general>;
+  type ComplaintForm = z.infer<typeof schemas.complaint>;
+
+  const generalForm = useForm<GeneralForm>({ resolver: zodResolver(schemas.general) });
+  const complaintForm = useForm<ComplaintForm>({ resolver: zodResolver(schemas.complaint) });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<ContactForm>({
-    resolver: zodResolver(contactSchema),
-  });
+  const switchTab = (next: Tab) => {
+    setTab(next);
+    setSubmitted(null);
+  };
 
-  const onSubmit = async (data: ContactForm) => {
+  const onSubmitGeneral = async (data: GeneralForm) => {
     setIsSubmitting(true);
     try {
-      await contactApi.submit(data);
-      toast.success('Message sent successfully! We\'ll get back to you soon.');
-      reset();
+      await contactApi.submit({ type: 'general', ...data });
+      toast.success(t('shop.contact.toast.sent'));
+      setSubmitted({ tab: 'general', email: data.email });
+      generalForm.reset();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to send message');
+      toast.error(error.response?.data?.message || t('shop.contact.toast.failed'));
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const onSubmitComplaint = async (data: ComplaintForm) => {
+    setIsSubmitting(true);
+    try {
+      await contactApi.submit({ type: 'complaint', ...data });
+      toast.success(t('shop.contact.toast.sent'));
+      setSubmitted({ tab: 'complaint', email: data.email });
+      complaintForm.reset();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || t('shop.contact.toast.failed'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const categoryOptions = COMPLAINT_CATEGORIES.map((value) => ({
+    value,
+    label: t(`shop.contact.category.${value}` as 'shop.contact.category.other'),
+  }));
+
   // Build contact info dynamically from settings
   const contactInfo = [
     settings.siteEmail && {
       icon: HiOutlineMail,
-      title: 'Email',
+      title: t('shop.contact.info.email'),
       value: settings.siteEmail,
       link: `mailto:${settings.siteEmail}`,
     },
     settings.sitePhone && {
       icon: HiOutlinePhone,
-      title: 'Phone',
+      title: t('shop.contact.info.phone'),
       value: settings.sitePhone,
       link: `tel:${settings.sitePhone.replace(/\s/g, '')}`,
     },
     settings.siteAddress && {
       icon: HiOutlineLocationMarker,
-      title: 'Address',
+      title: t('shop.contact.info.address'),
       value: settings.siteAddress,
       link: null,
     },
     {
       icon: HiOutlineClock,
-      title: 'Working Hours',
-      value: 'Sun - Thu: 9AM - 6PM',
+      title: t('shop.contact.info.hours'),
+      value: t('shop.contact.info.hoursValue'),
       link: null,
     },
   ].filter(Boolean) as { icon: any; title: string; value: string; link: string | null }[];
@@ -100,6 +160,13 @@ export default function ContactPageContent() {
     settings.socialWhatsapp && { name: 'WhatsApp', href: settings.socialWhatsapp.startsWith('http') ? settings.socialWhatsapp : `https://wa.me/${settings.socialWhatsapp.replace(/[^0-9]/g, '')}`, icon: FaWhatsapp },
   ].filter(Boolean) as { name: string; href: string; icon: any }[];
 
+  const tabs: { key: Tab; label: string; icon: typeof HiOutlineChatAlt2 }[] = [
+    { key: 'general', label: t('shop.contact.tab.general'), icon: HiOutlineChatAlt2 },
+    { key: 'complaint', label: t('shop.contact.tab.complaint'), icon: HiOutlineExclamationCircle },
+  ];
+
+  const showSuccess = submitted?.tab === tab;
+
   return (
     <div className="min-h-screen bg-beige-50 py-12">
       <div className="container mx-auto px-4">
@@ -110,7 +177,7 @@ export default function ContactPageContent() {
             animate={{ opacity: 1, y: 0 }}
             className="text-4xl font-display font-semibold text-dark-900 mb-4"
           >
-            Contact Us
+            {t('shop.contact.title')}
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -118,22 +185,21 @@ export default function ContactPageContent() {
             transition={{ delay: 0.1 }}
             className="text-dark-500 max-w-2xl mx-auto"
           >
-            Have a question or need assistance? We&apos;re here to help. Reach out to
-            us and we&apos;ll respond as soon as possible.
+            {t('shop.contact.subtitle')}
           </motion.p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {/* Contact Info */}
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             className="lg:col-span-1"
           >
             <Card padding="lg" className="h-full">
               <h2 className="text-xl font-semibold text-dark-900 mb-6">
-                Get in Touch
+                {t('shop.contact.getInTouch')}
               </h2>
               <div className="space-y-6">
                 {contactInfo.map((info, index) => (
@@ -163,7 +229,7 @@ export default function ContactPageContent() {
               {/* Social Links - Dynamic */}
               {socialLinks.length > 0 && (
                 <div className="mt-8 pt-6 border-t border-beige-200">
-                  <p className="text-sm text-dark-500 mb-4">Follow us on social media</p>
+                  <p className="text-sm text-dark-500 mb-4">{t('shop.contact.followUs')}</p>
                   <div className="flex flex-wrap gap-2">
                     {socialLinks.map((social) => (
                       <a
@@ -184,58 +250,179 @@ export default function ContactPageContent() {
             </Card>
           </motion.div>
 
-          {/* Contact Form */}
+          {/* Forms */}
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
             className="lg:col-span-2"
           >
-            <Card padding="lg">
-              <h2 className="text-xl font-semibold text-dark-900 mb-6">
-                Send us a Message
-              </h2>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Input
-                    label="Your Name"
-                    placeholder="Enter your name"
-                    error={errors.name?.message}
-                    {...register('name')}
-                  />
-                  <Input
-                    label="Email Address"
-                    type="email"
-                    placeholder="you@example.com"
-                    error={errors.email?.message}
-                    {...register('email')}
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Input
-                    label="Phone Number (Optional)"
-                    placeholder={settings.sitePhone || '+966 5X XXX XXXX'}
-                    error={errors.phone?.message}
-                    {...register('phone')}
-                  />
-                  <Input
-                    label="Subject"
-                    placeholder="What's this about?"
-                    error={errors.subject?.message}
-                    {...register('subject')}
-                  />
-                </div>
-                <Textarea
-                  label="Message"
-                  placeholder="Tell us more about your inquiry..."
-                  rows={6}
-                  error={errors.message?.message}
-                  {...register('message')}
-                />
-                <Button type="submit" size="lg" isLoading={isSubmitting}>
-                  Send Message
-                </Button>
-              </form>
+            <Card padding="none">
+              {/* Tab switch */}
+              <div
+                role="tablist"
+                aria-label={t('shop.contact.title')}
+                className="grid grid-cols-2 border-b border-beige-200"
+              >
+                {tabs.map((item) => {
+                  const active = tab === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => switchTab(item.key)}
+                      className={`flex items-center justify-center gap-2 px-4 py-4 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                        active
+                          ? 'border-primary-600 text-primary-700 bg-primary-50/60'
+                          : 'border-transparent text-dark-500 hover:text-dark-900 hover:bg-beige-50'
+                      }`}
+                    >
+                      <item.icon size={18} />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="p-6 sm:p-8">
+                {showSuccess ? (
+                  <div className="py-10 text-center">
+                    <div className="w-14 h-14 rounded-full bg-green-100 text-green-700 flex items-center justify-center mx-auto mb-4">
+                      <HiOutlineCheckCircle size={30} />
+                    </div>
+                    <h2 className="text-xl font-semibold text-dark-900 mb-2">
+                      {tab === 'complaint'
+                        ? t('shop.contact.success.complaintTitle')
+                        : t('shop.contact.success.title')}
+                    </h2>
+                    <p className="text-dark-500 max-w-md mx-auto mb-6">
+                      {tab === 'complaint'
+                        ? t('shop.contact.success.complaintMessage', { email: submitted.email })
+                        : t('shop.contact.success.message', { email: submitted.email })}
+                    </p>
+                    <Button variant="outline" onClick={() => setSubmitted(null)}>
+                      {t('shop.contact.success.again')}
+                    </Button>
+                  </div>
+                ) : tab === 'general' ? (
+                  <>
+                    <h2 className="text-xl font-semibold text-dark-900 mb-1 text-start">
+                      {t('shop.contact.general.heading')}
+                    </h2>
+                    <p className="text-sm text-dark-500 mb-6 text-start">
+                      {t('shop.contact.general.hint')}
+                    </p>
+                    <form
+                      onSubmit={generalForm.handleSubmit(onSubmitGeneral)}
+                      className="space-y-6"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input
+                          label={t('shop.contact.field.name')}
+                          placeholder={t('shop.contact.field.namePlaceholder')}
+                          error={generalForm.formState.errors.name?.message}
+                          {...generalForm.register('name')}
+                        />
+                        <Input
+                          label={t('shop.contact.field.email')}
+                          type="email"
+                          placeholder={t('shop.contact.field.emailPlaceholder')}
+                          error={generalForm.formState.errors.email?.message}
+                          {...generalForm.register('email')}
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input
+                          label={t('shop.contact.field.phoneOptional')}
+                          placeholder={
+                            settings.sitePhone || t('shop.contact.field.phonePlaceholder')
+                          }
+                          error={generalForm.formState.errors.phone?.message}
+                          {...generalForm.register('phone')}
+                        />
+                        <Input
+                          label={t('shop.contact.field.subject')}
+                          placeholder={t('shop.contact.field.subjectPlaceholder')}
+                          error={generalForm.formState.errors.subject?.message}
+                          {...generalForm.register('subject')}
+                        />
+                      </div>
+                      <Textarea
+                        label={t('shop.contact.field.message')}
+                        placeholder={t('shop.contact.field.messagePlaceholder')}
+                        rows={6}
+                        error={generalForm.formState.errors.message?.message}
+                        {...generalForm.register('message')}
+                      />
+                      <Button type="submit" size="lg" isLoading={isSubmitting}>
+                        {t('shop.contact.submit')}
+                      </Button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-xl font-semibold text-dark-900 mb-1 text-start">
+                      {t('shop.contact.complaint.heading')}
+                    </h2>
+                    <p className="text-sm text-dark-500 mb-6 text-start">
+                      {t('shop.contact.complaint.hint')}
+                    </p>
+                    <form
+                      onSubmit={complaintForm.handleSubmit(onSubmitComplaint)}
+                      className="space-y-6"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input
+                          label={t('shop.contact.field.name')}
+                          placeholder={t('shop.contact.field.namePlaceholder')}
+                          error={complaintForm.formState.errors.name?.message}
+                          {...complaintForm.register('name')}
+                        />
+                        <Input
+                          label={t('shop.contact.field.email')}
+                          type="email"
+                          placeholder={t('shop.contact.field.emailPlaceholder')}
+                          error={complaintForm.formState.errors.email?.message}
+                          {...complaintForm.register('email')}
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input
+                          label={t('shop.contact.field.phone')}
+                          placeholder={t('shop.contact.field.phonePlaceholder')}
+                          error={complaintForm.formState.errors.phone?.message}
+                          {...complaintForm.register('phone')}
+                        />
+                        <Input
+                          label={t('shop.contact.field.orderNumber')}
+                          placeholder={t('shop.contact.field.orderNumberPlaceholder')}
+                          error={complaintForm.formState.errors.orderNumber?.message}
+                          {...complaintForm.register('orderNumber')}
+                        />
+                      </div>
+                      <Select
+                        label={t('shop.contact.field.category')}
+                        placeholder={t('shop.contact.field.categoryPlaceholder')}
+                        options={categoryOptions}
+                        error={complaintForm.formState.errors.category?.message}
+                        {...complaintForm.register('category')}
+                      />
+                      <Textarea
+                        label={t('shop.contact.field.complaintMessage')}
+                        placeholder={t('shop.contact.field.complaintMessagePlaceholder')}
+                        rows={6}
+                        error={complaintForm.formState.errors.message?.message}
+                        {...complaintForm.register('message')}
+                      />
+                      <Button type="submit" size="lg" isLoading={isSubmitting}>
+                        {t('shop.contact.submitComplaint')}
+                      </Button>
+                    </form>
+                  </>
+                )}
+              </div>
             </Card>
           </motion.div>
         </div>
