@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { getDiscountedPrice } from '@/lib/utils';
+import { SERVER_API_URL } from '@/lib/api-base';
 import ProductDetailClient from './ProductDetailClient';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1';
+const API_URL = SERVER_API_URL;
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
 
 // Server-side fetch of a single product for SEO metadata + structured data.

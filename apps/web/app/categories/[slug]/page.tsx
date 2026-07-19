@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import CategoryClient from './CategoryClient';
+import { SERVER_API_URL } from '@/lib/api-base';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1';
+const API_URL = SERVER_API_URL;
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
 
 async function getCategory(slug: string): Promise<any | null> {

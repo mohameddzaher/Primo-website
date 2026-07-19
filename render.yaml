@@ -1,76 +1,92 @@
 # ============================================
-# PRIMO — Render Blueprint
+# PRIMO — Render Blueprint (single service)
 # ============================================
-# Deploys the API and the storefront as two web services.
+# One web service runs BOTH the storefront and the API in the same container:
+# Next.js on Render's public $PORT, Express on an internal 5005 that is never
+# exposed. Browser calls go to /api/proxy/* and Next forwards them locally.
 #
-# Region: BOTH services are pinned to Frankfurt because the MongoDB Atlas
-# cluster lives there. Render defaults to Oregon, which would put every single
-# database query on a round trip across the Atlantic — with several queries per
-# request that is the difference between a fast store and an unusable one.
-# If you ever move the Atlas cluster, move these too.
+# Why one service and not two:
+#   - one URL, one bill (~$7 instead of ~$14)
+#   - the API and the page server talk over localhost instead of the public
+#     internet, so server-rendered pages fetch their data with no network hop
+#   - same-origin, so there is NO CORS to configure — which removes the single
+#     most common way this deployment gets silently broken
 #
-# Plan: `starter`, not `free`. A free service sleeps after ~15 minutes idle and
-# the next visitor waits ~50s for it to wake — which is exactly what a demo
-# link handed to a client must never do.
+# The trade-off: both processes share one container's CPU and memory, and
+# `--kill-others` means if either dies the service restarts as a whole. That is
+# the right behaviour here — a storefront with a dead API is not "up".
 #
-# Secrets are NOT stored here. Values marked `sync: false` must be filled in
-# from the Render dashboard so they never enter the git history.
+# Region is Frankfurt because the MongoDB Atlas cluster resolves there. Render
+# defaults to Oregon; a page render issues several queries, and taking that
+# default puts every one of them on a round trip across the Atlantic.
+#
+# Plan is `starter`, not `free`: a free service sleeps after ~15 minutes idle
+# and the next visitor waits ~50s for it to wake.
 
 services:
-  # ─── API ──────────────────────────────────────────────────────────────────
   - type: web
-    name: primo-api
+    name: primo
     runtime: node
     region: frankfurt
     plan: starter
     branch: main
-    buildCommand: npm ci && npm run build -w @primo/shared && npm run build -w @primo/api
-    startCommand: npm run start -w @primo/api
-    healthCheckPath: /health
+
+    # --include=dev is REQUIRED. NODE_ENV=production below is visible during
+    # the build, and `npm ci` then omits devDependencies — which is where
+    # typescript, next and concurrently live. Without it the build fails with
+    # "tsc: not found".
+    buildCommand: npm ci --include=dev && npm run build:all
+    startCommand: npm run start:single
+    healthCheckPath: /
+
     envVars:
       - key: NODE_ENV
         value: production
       - key: API_VERSION
         value: v1
 
-      # Atlas connection string. Rotate the password BEFORE pasting it here —
-      # the previous one is still exposed in this repository's git history.
+      # ── How the two halves find each other ───────────────────────────────
+      # Relative: the browser calls this service, which forwards to the API in
+      # the same container. Keeping it relative is what makes CORS unnecessary.
+      - key: NEXT_PUBLIC_API_URL
+        value: /api/proxy
+      # Absolute, server-side only: server components and the sitemap cannot
+      # fetch a relative URL, and this is also the rewrite target.
+      - key: API_INTERNAL_URL
+        value: http://localhost:5005/api/v1
+      # Only used for canonical URLs and sitemap entries. Set this to the real
+      # service URL after the first deploy.
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+
+      # ── Database ─────────────────────────────────────────────────────────
+      # Rotate the Atlas password BEFORE pasting it here — the previous one is
+      # still exposed in this repository's git history.
       - key: MONGODB_URI
         sync: false
 
-      # Must be at least 32 characters and different from each other; the API
-      # refuses to boot in production otherwise (see config/validateConfig).
-      # Let Render generate them — nobody needs to know these values.
+      # At least 32 characters and different from each other; the API refuses
+      # to boot in production otherwise. Render generates them.
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
 
-      # Full storefront origin INCLUDING https:// and with no trailing slash,
-      # e.g. https://primo-web.onrender.com — comma-separate to add more.
-      # Deliberately not wired with `fromService`: that yields a bare hostname
-      # with no scheme, which does not match a browser Origin header, and CORS
-      # would fail on every request with nothing obviously misconfigured.
-      - key: CORS_ORIGIN
-        sync: false
-
-      # ── Simulated payments (DEMO DEPLOYMENT ONLY) ────────────────────────
+      # ── Simulated payments (DEMO ONLY) ───────────────────────────────────
       # Marks card / Apple Pay orders PAID without collecting any money, so the
-      # checkout journey can be shown end to end before a payment provider is
-      # contracted. Because NODE_ENV=production above would normally refuse it,
-      # the acknowledgement below is required as a second, deliberate step.
+      # checkout journey can be shown before a payment provider is contracted.
+      # NODE_ENV=production would normally refuse this; the acknowledgement is
+      # the deliberate second step that allows it.
       #
-      # BEFORE TAKING A SINGLE REAL ORDER: delete both of these, set
-      # PAYMENT_PROVIDER=moyasar, and add MOYASAR_SECRET_KEY +
-      # MOYASAR_WEBHOOK_SECRET.
+      # BEFORE TAKING A REAL ORDER: delete both, set PAYMENT_PROVIDER=moyasar,
+      # and add MOYASAR_SECRET_KEY + MOYASAR_WEBHOOK_SECRET.
       - key: PAYMENT_PROVIDER
         value: demo
       - key: ALLOW_DEMO_PAYMENTS
         value: i-understand-no-money-is-collected
 
       # ── Email (optional) ─────────────────────────────────────────────────
-      # Leave unset and the store still works; order emails simply are not
-      # sent. Set all four to enable them.
+      # Leave unset and the store works fine; order emails simply are not sent.
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -78,25 +94,4 @@ services:
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASS
-        sync: false
-
-  # ─── Storefront ───────────────────────────────────────────────────────────
-  - type: web
-    name: primo-web
-    runtime: node
-    region: frankfurt
-    plan: starter
-    branch: main
-    buildCommand: npm ci && npm run build -w @primo/shared && npm run build -w @primo/web
-    startCommand: npm run start -w @primo/web
-    envVars:
-      - key: NODE_ENV
-        value: production
-
-      # Baked into the client bundle at BUILD time, so the storefront must be
-      # rebuilt (not just restarted) if the API URL ever changes.
-      # Note the required /api/v1 suffix.
-      - key: NEXT_PUBLIC_API_URL
-        sync: false
-      - key: NEXT_PUBLIC_APP_URL
         sync: false

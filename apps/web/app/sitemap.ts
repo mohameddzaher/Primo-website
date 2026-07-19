@@ -1,11 +1,12 @@
 import type { MetadataRoute } from 'next';
+import { SERVER_API_URL } from '@/lib/api-base';
 
 // Dynamic sitemap — automatically includes every active product, category and
 // blog post by fetching the API at request time. Falls back to static routes
 // if the API is unreachable so the sitemap never 500s.
 
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1';
+const API_URL = SERVER_API_URL;
 
 // Revalidate the sitemap hourly so new products/categories show up automatically.
 export const revalidate = 3600;

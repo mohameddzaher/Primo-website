@@ -290,10 +290,15 @@ export function getImageUrl(image: any): string | undefined {
       : image;
   if (!raw || typeof raw !== 'string') return undefined;
   if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:')) return raw;
-  // Relative path — prepend API server root (strip /api/v1 suffix)
-  const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1')
-    .replace(/\/api\/v1\/?$/, '');
-  return `${apiBase}${raw.startsWith('/') ? raw : `/${raw}`}`;
+  const path = raw.startsWith('/') ? raw : `/${raw}`;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1';
+  // A relative API base means the API shares this origin (single-service
+  // deployment), so the path is already correct — the /uploads rewrite in
+  // next.config.js forwards it. Prefixing it would produce /api/proxy/uploads,
+  // which the API does not serve.
+  if (!/^https?:\/\//i.test(apiUrl)) return path;
+  // Absolute base — uploads live at the API root, not under /api/v1.
+  return `${apiUrl.replace(/\/api\/v1\/?$/, '')}${path}`;
 }
 
 export function uniqueBy<T>(array: T[], key: keyof T): T[] {
