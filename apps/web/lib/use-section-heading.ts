@@ -35,25 +35,36 @@ export interface SectionHeading {
   enabled: boolean;
 }
 
-/** Every section an admin can control, in the order they appear on the page. */
+/**
+ * Every section an admin can control, in the order they appear on the page.
+ *
+ * `hasImage` marks the sections that draw a single panel photo behind their
+ * heading — the only ones where a section-level image field means anything.
+ * Every other section's imagery belongs to the records it displays (category
+ * artwork, brand logos, product photos, article covers), so it is edited where
+ * those records live. `imageSource` says where, because offering a field here
+ * that silently changed nothing would be worse than offering none.
+ */
 export const HOMEPAGE_SECTIONS: Array<{
   id: string;
   name: string;
-  /** Sections that render an image panel behind their heading. */
+  /** Renders one admin-selectable photo behind the section heading. */
   hasImage?: boolean;
+  /** Where this section's imagery is actually edited, when not here. */
+  imageSource?: string;
 }> = [
-  { id: 'featured', name: 'Featured Products' },
-  { id: 'best_sellers', name: 'Best Sellers' },
+  { id: 'featured', name: 'Featured Products', imageSource: 'Products' },
+  { id: 'best_sellers', name: 'Best Sellers', hasImage: true },
   { id: 'on_sale', name: 'On Sale', hasImage: true },
-  { id: 'recently_viewed', name: 'Recently Viewed' },
-  { id: 'new_arrivals', name: 'New Arrivals' },
-  { id: 'flash_deals', name: 'Flash Deals' },
-  { id: 'top_rated', name: 'Top Rated' },
-  { id: 'brands', name: 'Brands' },
-  { id: 'category_spotlight', name: 'Category Spotlight', hasImage: true },
-  { id: 'shop_by_price', name: 'Shop by Price' },
-  { id: 'categories', name: 'Shop by Category' },
-  { id: 'buying_guides', name: 'Buying Guides' },
+  { id: 'recently_viewed', name: 'Recently Viewed', imageSource: 'Products' },
+  { id: 'new_arrivals', name: 'New Arrivals', imageSource: 'Products' },
+  { id: 'flash_deals', name: 'Flash Deals', imageSource: 'Products' },
+  { id: 'top_rated', name: 'Top Rated', imageSource: 'Products' },
+  { id: 'brands', name: 'Brands', imageSource: 'Brands' },
+  { id: 'category_spotlight', name: 'Category Spotlight', imageSource: 'Categories' },
+  { id: 'shop_by_price', name: 'Shop by Price', imageSource: 'Products' },
+  { id: 'categories', name: 'Shop by Category', imageSource: 'Categories' },
+  { id: 'buying_guides', name: 'Buying Guides', imageSource: 'Blog' },
   { id: 'testimonials', name: 'Testimonials' },
 ];
 

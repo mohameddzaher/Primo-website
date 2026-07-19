@@ -370,6 +370,14 @@ function ProductSectionsEditor({ data }: { data: any }) {
                   </div>
                 </div>
 
+                {section.imageSource && (
+                  <p className="text-xs text-dark-500 bg-white border border-beige-200 rounded-lg px-3 py-2">
+                    Images in this section come from your{' '}
+                    <span className="font-semibold text-dark-700">{section.imageSource}</span>{' '}
+                    — edit them there and they update here automatically.
+                  </p>
+                )}
+
                 {section.hasImage && (
                   <div>
                     <label className="block text-xs font-medium text-dark-600 mb-1">
